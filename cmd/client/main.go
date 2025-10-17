@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/client"
+	"github.com/ifrunruhin12/tasktime/internal/client"
 )
 
 func main() {

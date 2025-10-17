@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/models"
+	"github.com/ifrunruhin12/tasktime/internal/models"
 )
 
 func (m model) renderInputMode() string {

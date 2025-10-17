@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gorilla/websocket"
+	"github.com/ifrunruhin12/tasktime/internal/models"
 )
 
 type Client struct {
@@ -93,8 +93,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case models.WSMessage:
 		return m.handleWebSocketMessage(msg)
 
-
-
 	case taskCreationFailedMsg:
 		// Reload all tasks as fallback when creation fails
 		return m, m.loadTasks()
@@ -129,7 +127,7 @@ func (m model) View() string {
 	}
 
 	var s strings.Builder
-	
+
 	// Title with WebSocket status
 	title := "TaskTime - Team Task Manager"
 	if m.ws != nil {
@@ -156,6 +154,6 @@ func (m model) View() string {
 	}
 
 	s.WriteString(helpStyle.Render("n: new • d: done • s: timer • x: delete • r: refresh • q: quit"))
-	
+
 	return s.String()
 }

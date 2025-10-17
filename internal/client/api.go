@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gorilla/websocket"
+
+	"github.com/ifrunruhin12/tasktime/internal/models"
 )
 
 func (m model) loadTasks() tea.Cmd {
@@ -58,18 +59,18 @@ func (m model) updateTaskStatus(taskID, status string) tea.Cmd {
 
 		req, _ := http.NewRequest("PUT", m.client.serverURL+"/api/v1/tasks/"+taskID+"/status", bytes.NewBuffer(jsonData))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
 			return taskOperationFailedMsg{}
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 200 {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		return nil
 	}
 }
@@ -81,11 +82,11 @@ func (m model) startTimer(taskID string) tea.Cmd {
 			return taskOperationFailedMsg{}
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 200 {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		return nil
 	}
 }
@@ -97,11 +98,11 @@ func (m model) stopTimer(taskID string) tea.Cmd {
 			return taskOperationFailedMsg{}
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 200 {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		return nil
 	}
 }
@@ -115,11 +116,11 @@ func (m model) deleteTask(taskID string) tea.Cmd {
 			return taskOperationFailedMsg{}
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != 204 {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		return nil
 	}
 }
@@ -141,7 +142,7 @@ func (m model) listenWebSocket() tea.Cmd {
 		if m.ws == nil {
 			return nil
 		}
-		
+
 		var msg models.WSMessage
 		err := m.ws.ReadJSON(&msg)
 		if err != nil {
@@ -149,7 +150,7 @@ func (m model) listenWebSocket() tea.Cmd {
 			m.ws = nil
 			return wsDisconnectedMsg{}
 		}
-		
+
 		// Debug: Log received messages (you can remove this later)
 		// This will help us see if messages are being received
 		return msg

@@ -3,8 +3,8 @@ package client
 import (
 	"encoding/json"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ifrunruhin12/tasktime/internal/models"
 )
 
 func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -115,7 +115,7 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 				m.tasks = append([]models.Task{task}, m.tasks...)
 			}
 		}
-		
+
 	case "task.updated":
 		taskBytes, _ := json.Marshal(msg.Payload)
 		var updatedTask models.Task
@@ -127,7 +127,7 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 				}
 			}
 		}
-		
+
 	case "task.deleted":
 		if payload, ok := msg.Payload.(map[string]interface{}); ok {
 			if taskID, ok := payload["id"].(string); ok {
@@ -143,6 +143,6 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 			}
 		}
 	}
-	
+
 	return m, m.listenWebSocket()
 }

@@ -3,7 +3,7 @@ package storage
 import (
 	"database/sql"
 
-	"github.com/ifrunruhin12/tasktime-mvp/internal/models"
+	"github.com/ifrunruhin12/tasktime/internal/models"
 	_ "github.com/lib/pq"
 )
 

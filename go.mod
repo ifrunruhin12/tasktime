@@ -1,4 +1,4 @@
-module github.com/ifrunruhin12/tasktime-mvp
+module github.com/ifrunruhin12/tasktime
 
 go 1.21
 
