@@ -7,7 +7,7 @@ Thank you for your interest in contributing to TimeTask! This guide will help yo
 1. **Fork the repository**
 2. **Clone your fork**:
    ```bash
-   git clone https://github.com/yourusername/timetask.git
+   git clone https://github.com/ifrunruhin12/timetask.git
    cd timetask
    ```
 3. **Setup development (Docker - Recommended)**:
