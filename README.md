@@ -83,7 +83,7 @@ export PORT="8080"
 │ ▶ ○ Fix login bug [backend] 05:23 ▶             │
 │   ● Write documentation [docs]                    │
 │   ○ Deploy to staging [ops] 12:45                 │
-│   ○ Code review PR #123 [frontend]              │
+│   ○ Code review PR #123 [frontend]                │
 │                                                   │
 │ n: new • d: done • s: timer • x: delete • q: quit │
 └───────────────────────────────────────────────────┘
