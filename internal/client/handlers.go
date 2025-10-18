@@ -8,6 +8,12 @@ import (
 )
 
 func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Get current tasks based on section
+	currentTasks := m.personalTasks
+	if m.currentSection == "team" {
+		currentTasks = m.teamTasks
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q":
 		if m.ws != nil {
@@ -15,13 +21,22 @@ func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 
+	case "tab":
+		// Switch between personal and team sections
+		if m.currentSection == "personal" {
+			m.currentSection = "team"
+		} else {
+			m.currentSection = "personal"
+		}
+		m.cursor = 0 // Reset cursor when switching sections
+
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
 		}
 
 	case "down", "j":
-		if m.cursor < len(m.tasks)-1 {
+		if m.cursor < len(currentTasks)-1 {
 			m.cursor++
 		}
 
@@ -32,33 +47,56 @@ func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inputMode = 0
 
 	case "d":
-		if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
-			task := m.tasks[m.cursor]
+		if len(currentTasks) > 0 && m.cursor < len(currentTasks) {
+			task := currentTasks[m.cursor]
 			newStatus := "done"
 			if task.Status == "done" {
 				newStatus = "todo"
 			}
-			return m, m.updateTaskStatus(task.ID, newStatus)
+			
+			if m.currentSection == "personal" {
+				return m, m.updatePersonalTaskStatus(task.ID, newStatus)
+			} else {
+				return m, m.updateTeamTaskStatus(task.ID, newStatus)
+			}
 		}
 
 	case "s":
-		if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
-			task := m.tasks[m.cursor]
-			if task.IsActive {
-				return m, m.stopTimer(task.ID)
+		if len(currentTasks) > 0 && m.cursor < len(currentTasks) {
+			task := currentTasks[m.cursor]
+			
+			if m.currentSection == "personal" {
+				if task.IsActive {
+					return m, m.stopPersonalTimer(task.ID)
+				} else {
+					return m, m.startPersonalTimer(task.ID)
+				}
 			} else {
-				return m, m.startTimer(task.ID)
+				if task.IsActive {
+					return m, m.stopTeamTimer(task.ID)
+				} else {
+					return m, m.startTeamTimer(task.ID)
+				}
 			}
 		}
 
 	case "x":
-		if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
-			task := m.tasks[m.cursor]
-			return m, m.deleteTask(task.ID)
+		if len(currentTasks) > 0 && m.cursor < len(currentTasks) {
+			task := currentTasks[m.cursor]
+			
+			if m.currentSection == "personal" {
+				return m, m.deletePersonalTask(task.ID)
+			} else {
+				return m, m.deleteTeamTask(task.ID)
+			}
 		}
 
 	case "r":
-		return m, m.loadTasks()
+		if m.currentSection == "personal" {
+			return m, m.loadPersonalTasks()
+		} else {
+			return m, m.loadTeamTasks()
+		}
 	}
 
 	return m, nil
@@ -76,7 +114,12 @@ func (m model) handleInputKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		} else if m.inputMode == 1 {
 			m.showInput = false
-			return m, m.createTask(m.inputTitle, m.inputProject)
+			
+			if m.currentSection == "personal" {
+				return m, m.createPersonalTask(m.inputTitle, m.inputProject)
+			} else {
+				return m, m.createTeamTask(m.inputTitle, m.inputProject)
+			}
 		}
 
 	case "backspace":
@@ -105,14 +148,14 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 		if json.Unmarshal(taskBytes, &task) == nil {
 			// Check if task already exists to avoid duplicates
 			exists := false
-			for _, existingTask := range m.tasks {
+			for _, existingTask := range m.teamTasks {
 				if existingTask.ID == task.ID {
 					exists = true
 					break
 				}
 			}
 			if !exists {
-				m.tasks = append([]models.Task{task}, m.tasks...)
+				m.teamTasks = append([]models.Task{task}, m.teamTasks...)
 			}
 		}
 
@@ -120,9 +163,9 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 		taskBytes, _ := json.Marshal(msg.Payload)
 		var updatedTask models.Task
 		if json.Unmarshal(taskBytes, &updatedTask) == nil {
-			for i, task := range m.tasks {
+			for i, task := range m.teamTasks {
 				if task.ID == updatedTask.ID {
-					m.tasks[i] = updatedTask
+					m.teamTasks[i] = updatedTask
 					break
 				}
 			}
@@ -131,11 +174,12 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 	case "task.deleted":
 		if payload, ok := msg.Payload.(map[string]interface{}); ok {
 			if taskID, ok := payload["id"].(string); ok {
-				for i, task := range m.tasks {
+				for i, task := range m.teamTasks {
 					if task.ID == taskID {
-						m.tasks = append(m.tasks[:i], m.tasks[i+1:]...)
-						if m.cursor >= len(m.tasks) && len(m.tasks) > 0 {
-							m.cursor = len(m.tasks) - 1
+						m.teamTasks = append(m.teamTasks[:i], m.teamTasks[i+1:]...)
+						// Adjust cursor if we're in team section and cursor is out of bounds
+						if m.currentSection == "team" && m.cursor >= len(m.teamTasks) && len(m.teamTasks) > 0 {
+							m.cursor = len(m.teamTasks) - 1
 						}
 						break
 					}

@@ -12,6 +12,7 @@ type Task struct {
 	StartTime        *time.Time `json:"start_time,omitempty"`
 	TotalTimeSeconds int        `json:"total_time_seconds"`
 	CreatedAt        time.Time  `json:"created_at"`
+	IsPersonal       bool       `json:"is_personal"` // New field to distinguish personal vs team tasks
 }
 
 // WSMessage represents a WebSocket message

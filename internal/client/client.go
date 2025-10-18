@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gorilla/websocket"
 	"github.com/ifrunruhin12/tasktime/internal/models"
+	"github.com/ifrunruhin12/tasktime/internal/storage"
 )
 
 type Client struct {
@@ -26,30 +27,38 @@ func (c *Client) Start() error {
 }
 
 func (c *Client) initialModel() model {
+	localStore, _ := storage.NewLocalStore()
 	return model{
-		client:    c,
-		tasks:     []models.Task{},
-		cursor:    0,
-		showInput: false,
-		width:     80,
-		height:    24,
+		client:         c,
+		personalTasks:  []models.Task{},
+		teamTasks:      []models.Task{},
+		cursor:         0,
+		showInput:      false,
+		width:          80,
+		height:         24,
+		currentSection: "personal", // Start with personal tasks
+		localStore:     localStore,
 	}
 }
 
 type model struct {
-	client       *Client
-	tasks        []models.Task
-	cursor       int
-	showInput    bool
-	inputTitle   string
-	inputProject string
-	inputMode    int
-	ws           *websocket.Conn
-	width        int
-	height       int
+	client         *Client
+	personalTasks  []models.Task
+	teamTasks      []models.Task
+	cursor         int
+	showInput      bool
+	inputTitle     string
+	inputProject   string
+	inputMode      int
+	ws             *websocket.Conn
+	width          int
+	height         int
+	currentSection string // "personal" or "team"
+	localStore     *storage.LocalStore
 }
 
-type tasksLoadedMsg []models.Task
+type personalTasksLoadedMsg []models.Task
+type teamTasksLoadedMsg []models.Task
 type wsConnectedMsg *websocket.Conn
 type tickMsg time.Time
 type taskCreationFailedMsg struct{}
@@ -60,7 +69,8 @@ type taskOperationFailedMsg struct{}
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
-		m.loadTasks(),
+		m.loadPersonalTasks(),
+		m.loadTeamTasks(),
 		m.connectWebSocket(),
 		m.tick(),
 	)
@@ -79,8 +89,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleNormalKeys(msg)
 
-	case tasksLoadedMsg:
-		m.tasks = []models.Task(msg)
+	case personalTasksLoadedMsg:
+		m.personalTasks = []models.Task(msg)
+		return m, nil
+
+	case teamTasksLoadedMsg:
+		m.teamTasks = []models.Task(msg)
 		return m, nil
 
 	case wsConnectedMsg:
@@ -94,8 +108,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWebSocketMessage(msg)
 
 	case taskCreationFailedMsg:
-		// Reload all tasks as fallback when creation fails
-		return m, m.loadTasks()
+		// Reload tasks as fallback when creation fails
+		if m.currentSection == "personal" {
+			return m, m.loadPersonalTasks()
+		}
+		return m, m.loadTeamTasks()
 
 	case wsDisconnectedMsg:
 		// WebSocket disconnected, try to reconnect
@@ -115,7 +132,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case taskOperationFailedMsg:
 		// Task operation failed, reload tasks to get current state
-		return m, m.loadTasks()
+		if m.currentSection == "personal" {
+			return m, m.loadPersonalTasks()
+		}
+		return m, m.loadTeamTasks()
 	}
 
 	return m, nil
@@ -129,7 +149,7 @@ func (m model) View() string {
 	var s strings.Builder
 
 	// Title with WebSocket status
-	title := "TaskTime - Team Task Manager"
+	title := "TaskTime - Dual Task Manager"
 	if m.ws != nil {
 		title += " [LIVE]"
 	} else {
@@ -138,10 +158,33 @@ func (m model) View() string {
 	s.WriteString(titleStyle.Render(title))
 	s.WriteString("\n\n")
 
-	if len(m.tasks) == 0 {
+	// Section tabs
+	personalTab := "Personal Tasks"
+	teamTab := "Team Tasks"
+	
+	if m.currentSection == "personal" {
+		personalTab = "▶ " + personalTab + " ◀"
+		teamTab = "  " + teamTab + "  "
+	} else {
+		personalTab = "  " + personalTab + "  "
+		teamTab = "▶ " + teamTab + " ◀"
+	}
+
+	s.WriteString(selectedStyle.Render(personalTab))
+	s.WriteString("   ")
+	s.WriteString(normalStyle.Render(teamTab))
+	s.WriteString("\n\n")
+
+	// Get current tasks based on section
+	currentTasks := m.personalTasks
+	if m.currentSection == "team" {
+		currentTasks = m.teamTasks
+	}
+
+	if len(currentTasks) == 0 {
 		s.WriteString("No tasks yet. Press 'n' to create one!\n\n")
 	} else {
-		for i, task := range m.tasks {
+		for i, task := range currentTasks {
 			line := m.renderTaskLine(i, task)
 			if m.cursor == i {
 				s.WriteString(selectedStyle.Render(line))
@@ -153,7 +196,7 @@ func (m model) View() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString(helpStyle.Render("n: new • d: done • s: timer • x: delete • r: refresh • q: quit"))
+	s.WriteString(helpStyle.Render("tab: switch • n: new • d: done • s: timer • x: delete • r: refresh • q: quit"))
 
 	return s.String()
 }

@@ -18,8 +18,8 @@
 go.work
 
 # Built applications
-timetask-server
-timetask-client
+tasktime-server
+tasktime-client
 debug-client
 
 # IDE files

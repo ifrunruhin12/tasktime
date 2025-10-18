@@ -11,7 +11,12 @@ import (
 func (m model) renderInputMode() string {
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("Create New Task"))
+	sectionName := "Personal"
+	if m.currentSection == "team" {
+		sectionName = "Team"
+	}
+	
+	s.WriteString(titleStyle.Render(fmt.Sprintf("Create New %s Task", sectionName)))
 	s.WriteString("\n\n")
 
 	if m.inputMode == 0 {

@@ -1,17 +1,19 @@
 # TimeTask (MVP)
 
-> Real-time collaborative task management with terminal interface
+> Dual-mode task management: Personal tasks (local) + Team collaboration (real-time sync)
 
-A modern task management tool built for development teams. Features real-time synchronization, time tracking, and a clean terminal UI. Perfect for teams who prefer keyboard-driven workflows.
+A modern task management tool built for development teams and individuals. Features both personal task management (stored locally) and real-time team collaboration. Perfect for developers who need both private task tracking and team coordination.
 
 ## ✨ Features
 
-- 🚀 **Real-time Collaboration** - See team changes instantly
-- 💻 **Beautiful TUI** - Clean terminal interface with Bubble Tea
-- ⏱️ **Time Tracking** - Start/stop timers on tasks
-- 📋 **Task Management** - Create, complete, and delete tasks
-- 🔄 **Live Updates** - WebSocket-powered real-time sync
+- 👤 **Personal Tasks** - Private tasks stored locally, no sync required
+- 🚀 **Team Collaboration** - Real-time synchronized team tasks
+- 💻 **Beautiful TUI** - Clean terminal interface with dual sections
+- ⏱️ **Time Tracking** - Start/stop timers on both personal and team tasks
+- 📋 **Task Management** - Create, complete, and delete tasks in both modes
+- 🔄 **Live Updates** - WebSocket-powered real-time sync for team tasks
 - 🎨 **Color-coded Status** - Visual task states and project tags
+- ⚡ **Quick Switching** - Tab between personal and team sections instantly
 
 ## 🚀 Quick Start
 
@@ -44,13 +46,17 @@ make client
 ```
 
 ### 3. Use the TUI
-- `n` - Create new task
+- `tab` - Switch between Personal and Team sections
+- `n` - Create new task (in current section)
 - `d` - Toggle task completion (todo ↔ done)
 - `s` - Start/stop timer on selected task
 - `x` - Delete task
 - `r` - Refresh task list
 - `↑/↓` or `j/k` - Navigate tasks
 - `q` - Quit
+
+**Personal Tasks**: Stored locally in `~/.tasktime/personal_tasks.json` - never synced
+**Team Tasks**: Synchronized in real-time across all connected clients
 
 ## 👥 Team Usage
 
@@ -78,20 +84,22 @@ export PORT="8080"
 ## 🎮 Demo
 
 ```
-┌─ TimeTask - Team Task Manager [LIVE] ─────────────┐
-│                                                   │
-│ ▶ ○ Fix login bug [backend] 05:23 ▶             │
-│   ● Write documentation [docs]                    │
-│   ○ Deploy to staging [ops] 12:45                 │
-│   ○ Code review PR #123 [frontend]                │
-│                                                   │
-│ n: new • d: done • s: timer • x: delete • q: quit │
-└───────────────────────────────────────────────────┘
+┌─ TimeTask - Dual Task Manager [LIVE] ──────────────┐
+│                                                    │
+│ ▶ Personal Tasks ◀   Team Tasks                  │
+│                                                    │
+│ ▶ ○ Review code locally [personal] 02:15 ▶       │
+│   ● Buy groceries                                  │
+│   ○ Study algorithms [learning]                    │
+│                                                    │
+│ tab: switch • n: new • d: done • s: timer • q: quit│
+└────────────────────────────────────────────────────┘
 ```
 
-**Real-time Features:**
-- 🔴 **Live Timer**: See active timers with ▶ indicator
-- 🔄 **Instant Sync**: Changes appear immediately across all clients
+**Dual-Mode Features:**
+- � **PersonalS Mode**: Private tasks, local storage, no network required
+- � ***Team Mode**: Real-time collaboration with WebSocket sync
+- 🔴 **Live Timers**: See active timers with ▶ indicator in both modes
 - 📊 **Time Tracking**: Accumulated time persists across sessions
 - 🎯 **Project Tags**: Organize tasks by project/category
 
@@ -119,12 +127,14 @@ timetask/
 
 ## 🎯 MVP Features Completed
 
-- ✅ Real-time multi-client synchronization via WebSocket
+- ✅ **Dual-mode operation**: Personal (local) + Team (synchronized) tasks
+- ✅ Real-time multi-client synchronization via WebSocket for team tasks
+- ✅ Local JSON storage for personal tasks (no server required)
 - ✅ Persistent time tracking with accumulation across sessions
-- ✅ PostgreSQL database with automatic schema creation
-- ✅ Clean terminal UI with keyboard navigation
-- ✅ Task creation, completion, and deletion
-- ✅ Live timer start/stop synchronization
+- ✅ PostgreSQL database with automatic schema creation for team tasks
+- ✅ Clean terminal UI with dual-section navigation
+- ✅ Task creation, completion, and deletion in both modes
+- ✅ Live timer start/stop synchronization for team tasks
 - ✅ Project-based task organization
 
 ## 🔮 Future Enhancements
