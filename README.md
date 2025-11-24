@@ -55,6 +55,30 @@ make client
 - `↑/↓` or `j/k` - Navigate tasks
 - `q` - Quit
 
+## 📚 API Documentation
+
+Interactive Swagger documentation is available when the server is running:
+
+```
+http://localhost:8080/swagger/index.html
+```
+
+The Swagger UI provides:
+- 🔍 Complete API reference for all endpoints
+- 🧪 Interactive testing interface
+- 🔐 Built-in authentication support
+- 📝 Request/response examples
+
+**Quick API Test:**
+1. Start the server
+2. Open `http://localhost:8080/swagger/index.html`
+3. Register a user via `/auth/register`
+4. Copy the JWT token from the response
+5. Click "Authorize" and enter `Bearer YOUR_TOKEN`
+6. Test any endpoint!
+
+See [docs/README.md](docs/README.md) for detailed API documentation.
+
 **Personal Tasks**: Stored locally in `~/.tasktime/personal_tasks.json` - never synced
 **Team Tasks**: Synchronized in real-time across all connected clients
 

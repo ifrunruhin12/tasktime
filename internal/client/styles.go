@@ -19,4 +19,10 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("8"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("196")).
+			Bold(true).
+			Padding(0, 1)
 )

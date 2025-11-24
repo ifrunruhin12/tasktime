@@ -8,7 +8,6 @@ import (
 )
 
 func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Get current tasks based on section
 	currentTasks := m.personalTasks
 	if m.currentSection == "team" {
 		currentTasks = m.teamTasks
@@ -53,7 +52,7 @@ func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if task.Status == "done" {
 				newStatus = "todo"
 			}
-			
+
 			if m.currentSection == "personal" {
 				return m, m.updatePersonalTaskStatus(task.ID, newStatus)
 			} else {
@@ -64,7 +63,7 @@ func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		if len(currentTasks) > 0 && m.cursor < len(currentTasks) {
 			task := currentTasks[m.cursor]
-			
+
 			if m.currentSection == "personal" {
 				if task.IsActive {
 					return m, m.stopPersonalTimer(task.ID)
@@ -83,7 +82,7 @@ func (m model) handleNormalKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if len(currentTasks) > 0 && m.cursor < len(currentTasks) {
 			task := currentTasks[m.cursor]
-			
+
 			if m.currentSection == "personal" {
 				return m, m.deletePersonalTask(task.ID)
 			} else {
@@ -114,7 +113,7 @@ func (m model) handleInputKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		} else if m.inputMode == 1 {
 			m.showInput = false
-			
+
 			if m.currentSection == "personal" {
 				return m, m.createPersonalTask(m.inputTitle, m.inputProject)
 			} else {
@@ -146,7 +145,6 @@ func (m model) handleWebSocketMessage(msg models.WSMessage) (tea.Model, tea.Cmd)
 		taskBytes, _ := json.Marshal(msg.Payload)
 		var task models.Task
 		if json.Unmarshal(taskBytes, &task) == nil {
-			// Check if task already exists to avoid duplicates
 			exists := false
 			for _, existingTask := range m.teamTasks {
 				if existingTask.ID == task.ID {

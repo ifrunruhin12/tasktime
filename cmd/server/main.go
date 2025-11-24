@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 
+	_ "github.com/ifrunruhin12/tasktime/docs" // Import generated docs
 	"github.com/ifrunruhin12/tasktime/internal/server"
 )
 

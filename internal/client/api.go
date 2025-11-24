@@ -17,7 +17,7 @@ func (m model) loadPersonalTasks() tea.Cmd {
 		if m.localStore == nil {
 			return personalTasksLoadedMsg([]models.Task{})
 		}
-		
+
 		tasks, err := m.localStore.GetTasks()
 		if err != nil {
 			return personalTasksLoadedMsg([]models.Task{})
@@ -31,7 +31,7 @@ func (m model) createPersonalTask(title, project string) tea.Cmd {
 		if m.localStore == nil {
 			return taskCreationFailedMsg{}
 		}
-		
+
 		_, err := m.localStore.CreateTask(title, project)
 		if err != nil {
 			return taskCreationFailedMsg{}
@@ -45,7 +45,7 @@ func (m model) updatePersonalTaskStatus(id, status string) tea.Cmd {
 		if m.localStore == nil {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		_, err := m.localStore.UpdateTaskStatus(id, status)
 		if err != nil {
 			return taskOperationFailedMsg{}
@@ -59,7 +59,7 @@ func (m model) deletePersonalTask(id string) tea.Cmd {
 		if m.localStore == nil {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		err := m.localStore.DeleteTask(id)
 		if err != nil {
 			return taskOperationFailedMsg{}
@@ -73,7 +73,7 @@ func (m model) startPersonalTimer(id string) tea.Cmd {
 		if m.localStore == nil {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		_, err := m.localStore.StartTimer(id)
 		if err != nil {
 			return taskOperationFailedMsg{}
@@ -87,7 +87,7 @@ func (m model) stopPersonalTimer(id string) tea.Cmd {
 		if m.localStore == nil {
 			return taskOperationFailedMsg{}
 		}
-		
+
 		_, err := m.localStore.StopTimer(id)
 		if err != nil {
 			return taskOperationFailedMsg{}
@@ -96,7 +96,6 @@ func (m model) stopPersonalTimer(id string) tea.Cmd {
 	}
 }
 
-// Team task operations (server API)
 func (m model) loadTeamTasks() tea.Cmd {
 	return func() tea.Msg {
 		resp, err := http.Get(m.client.serverURL + "/api/v1/tasks")

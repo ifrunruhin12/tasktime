@@ -19,14 +19,13 @@ func NewLocalStore() (*LocalStore, error) {
 		return nil, err
 	}
 
-	// Create .tasktime directory if it doesn't exist
 	tasktimeDir := filepath.Join(homeDir, ".tasktime")
 	if err := os.MkdirAll(tasktimeDir, 0755); err != nil {
 		return nil, err
 	}
 
 	filePath := filepath.Join(tasktimeDir, "personal_tasks.json")
-	
+
 	return &LocalStore{
 		filePath: filePath,
 	}, nil
@@ -162,7 +161,6 @@ func (s *LocalStore) StopTimer(id string) (*models.Task, error) {
 	return nil, os.ErrNotExist
 }
 
-// Simple ID generator for local tasks
 func generateID() string {
 	return time.Now().Format("20060102150405") + "-" + time.Now().Format("000")
 }

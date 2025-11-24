@@ -1,6 +1,7 @@
 package client
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -11,19 +12,97 @@ import (
 )
 
 type Client struct {
-	serverURL string
+	serverURL     string
+	configManager *ConfigManager
+	config        *ClientConfig
 }
 
 func New(serverURL string) *Client {
+	cm, _ := NewConfigManager()
 	return &Client{
-		serverURL: serverURL,
+		serverURL:     serverURL,
+		configManager: cm,
 	}
 }
 
 func (c *Client) Start() error {
-	p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
+	// Check if config exists
+	if c.configManager != nil && c.configManager.Exists() {
+		// Load existing config
+		config, err := c.configManager.Load()
+		if err == nil && config.AutoConnect && config.AuthToken != "" {
+			// Use config values
+			c.config = config
+			c.serverURL = config.ServerURL
+			
+			// Validate token and start main app
+			if c.validateToken(config.AuthToken) {
+				p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
+				_, err := p.Run()
+				return err
+			}
+		}
+	}
+	
+	// No valid config, run setup flow
+	return c.runSetup()
+}
+
+func (c *Client) runSetup() error {
+	if c.configManager == nil {
+		cm, err := NewConfigManager()
+		if err != nil {
+			return err
+		}
+		c.configManager = cm
+	}
+	
+	sm := newSetupModel(c.configManager)
+	p := tea.NewProgram(sm, tea.WithAltScreen())
+	
 	_, err := p.Run()
-	return err
+	if err != nil {
+		return err
+	}
+	
+	// After setup completes, load the config and start main app
+	if c.configManager.Exists() {
+		config, err := c.configManager.Load()
+		if err == nil && config.AuthToken != "" {
+			c.config = config
+			c.serverURL = config.ServerURL
+			
+			// Start main application
+			p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
+			_, err := p.Run()
+			return err
+		}
+	}
+	
+	return nil
+}
+
+func (c *Client) validateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	// Try to validate token with the server
+	req, err := http.NewRequest("GET", c.serverURL+"/api/v1/users/me", nil)
+	if err != nil {
+		return false
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+token)
+	
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	
+	return resp.StatusCode == 200
 }
 
 func (c *Client) initialModel() model {
@@ -38,6 +117,7 @@ func (c *Client) initialModel() model {
 		height:         24,
 		currentSection: "personal", // Start with personal tasks
 		localStore:     localStore,
+		config:         c.config,
 	}
 }
 
@@ -55,6 +135,7 @@ type model struct {
 	height         int
 	currentSection string // "personal" or "team"
 	localStore     *storage.LocalStore
+	config         *ClientConfig
 }
 
 type personalTasksLoadedMsg []models.Task
@@ -148,8 +229,11 @@ func (m model) View() string {
 
 	var s strings.Builder
 
-	// Title with WebSocket status
+	// Title with WebSocket status and username
 	title := "TaskTime - Dual Task Manager"
+	if m.config != nil && m.config.Username != "" {
+		title = "TaskTime - " + m.config.Username
+	}
 	if m.ws != nil {
 		title += " [LIVE]"
 	} else {

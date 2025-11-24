@@ -1,0 +1,523 @@
+basePath: /api/v1
+definitions:
+  github_com_ifrunruhin12_tasktime_internal_models.AssignTaskRequest:
+    properties:
+      assigned_to:
+        description: Pointer to allow null for unassignment
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.AuthResponse:
+    properties:
+      created_at:
+        type: string
+      token:
+        type: string
+      username:
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.CreateTaskRequest:
+    properties:
+      project:
+        type: string
+      title:
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.RegisterRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.Task:
+    properties:
+      assigned_to:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        description: New fields for v1.0.0
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_personal:
+        description: New field to distinguish personal vs team tasks
+        type: boolean
+      project:
+        type: string
+      start_time:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      total_time_seconds:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  github_com_ifrunruhin12_tasktime_internal_models.UpdateStatusRequest:
+    properties:
+      status:
+        type: string
+    type: object
+  internal_server.ErrorDetail:
+    properties:
+      code:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      message:
+        type: string
+    type: object
+  internal_server.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/internal_server.ErrorDetail'
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@tasktime.io
+    name: API Support
+  description: Task management and time tracking API with real-time collaboration
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: TaskTime API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and receive JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.AuthResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      summary: Login user
+      tags:
+      - Authentication
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with username and password
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.AuthResponse'
+        "400":
+          description: Invalid request or validation error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "409":
+          description: Username already exists
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - Authentication
+  /health:
+    get:
+      description: Check server health and database connectivity
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status, database, uptime_seconds, timestamp
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: status, database, error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - Monitoring
+  /stats:
+    get:
+      description: Get statistics including active users, total users, total tasks,
+        active timers, and uptime
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: active_users, total_users, total_tasks, active_timers, uptime_seconds
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get server statistics
+      tags:
+      - Monitoring
+  /tasks:
+    get:
+      description: Get all tasks or filter by assigned user
+      parameters:
+      - description: Filter tasks (my=assigned to me, all=all tasks)
+        in: query
+        name: filter
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get tasks
+      tags:
+      - Tasks
+    post:
+      consumes:
+      - application/json
+      description: Create a new task (created_by is automatically set from JWT token)
+      parameters:
+      - description: Task details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create task
+      tags:
+      - Tasks
+  /tasks/{id}:
+    delete:
+      description: Delete a task by ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete task
+      tags:
+      - Tasks
+  /tasks/{id}/assign:
+    put:
+      consumes:
+      - application/json
+      description: Assign a task to an online user or unassign it
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Assignment details (null to unassign)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.AssignTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+        "400":
+          description: Invalid request or user not online
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign task
+      tags:
+      - Tasks
+  /tasks/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a task (todo, in-progress, done)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New status
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.UpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update task status
+      tags:
+      - Tasks
+  /tasks/{id}/time/start:
+    post:
+      description: Start tracking time for a task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start task timer
+      tags:
+      - Tasks
+  /tasks/{id}/time/stop:
+    post:
+      description: Stop tracking time for a task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ifrunruhin12_tasktime_internal_models.Task'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop task timer
+      tags:
+      - Tasks
+  /tasks/assigned/{username}:
+    get:
+      description: Get all tasks assigned to a specific user
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'tasks: array of Task, count: number'
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get assigned tasks
+      tags:
+      - Tasks
+  /users/me:
+    get:
+      description: Get information about the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: username, created_at, last_seen
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - Users
+  /users/online:
+    get:
+      description: Get list of currently connected users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'users: array of usernames, count: number'
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get online users
+      tags:
+      - Users
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

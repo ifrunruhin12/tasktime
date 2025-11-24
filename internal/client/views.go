@@ -15,7 +15,7 @@ func (m model) renderInputMode() string {
 	if m.currentSection == "team" {
 		sectionName = "Team"
 	}
-	
+
 	s.WriteString(titleStyle.Render(fmt.Sprintf("Create New %s Task", sectionName)))
 	s.WriteString("\n\n")
 
@@ -42,14 +42,12 @@ func (m model) renderTaskLine(index int, task models.Task) string {
 		status = "●"
 	}
 
-	// Calculate total time including current session
 	totalSeconds := task.TotalTimeSeconds
 	if task.IsActive && task.StartTime != nil && !task.StartTime.IsZero() {
 		currentSession := time.Since(*task.StartTime)
 		totalSeconds += int(currentSession.Seconds())
 	}
 
-	// Format time display
 	timer := ""
 	if totalSeconds > 0 || task.IsActive {
 		hours := totalSeconds / 3600

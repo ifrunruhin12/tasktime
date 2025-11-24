@@ -23,6 +23,7 @@ services:
     container_name: timetask-server
     environment:
       DATABASE_URL: "postgres://timetask:timetask@postgres:5432/timetask?sslmode=disable"
+      JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
       PORT: "8080"
     ports:
       - "8080:8080"
