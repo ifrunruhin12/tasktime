@@ -1,10 +1,7 @@
 package client
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,16 +9,17 @@ import (
 
 // setupModel represents the first-time setup flow
 type setupModel struct {
-	configManager *ConfigManager
-	config        *ClientConfig
-	step          int // 0: server URL, 1: login/register choice, 2: username, 3: password
-	authMode      string // "login" or "register"
-	serverURL     string
-	username      string
-	password      string
-	errorMsg      string
-	width         int
-	height        int
+	configManager     *ConfigManager
+	config            *ClientConfig
+	step              int // 0: server URL, 1: login/register choice, 2: username, 3: password, 4: confirm password (register only)
+	authMode          string // "login" or "register"
+	serverURL         string
+	username          string
+	password          string
+	confirmPassword   string
+	errorMsg          string
+	width             int
+	height            int
 }
 
 type setupCompleteMsg struct {
@@ -82,6 +80,10 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case authErrorMsg:
 		m.errorMsg = msg.error
 		return m, nil
+
+	case setupCompleteMsg:
+		// Setup is complete, quit the setup program
+		return m, tea.Quit
 	}
 
 	return m, nil
@@ -140,6 +142,16 @@ func (m setupModel) View() string {
 		s.WriteString("Password:\n\n")
 		s.WriteString(selectedStyle.Render(strings.Repeat("*", len(m.password)) + "_"))
 		s.WriteString("\n\n")
+		s.WriteString(helpStyle.Render("Enter: continue • Esc: go back"))
+
+	case 4:
+		// Confirm password input (only for registration)
+		s.WriteString(fmt.Sprintf("Server: %s\n", m.serverURL))
+		s.WriteString(fmt.Sprintf("Mode: %s\n", strings.Title(m.authMode)))
+		s.WriteString(fmt.Sprintf("Username: %s\n\n", m.username))
+		s.WriteString("Confirm Password:\n\n")
+		s.WriteString(selectedStyle.Render(strings.Repeat("*", len(m.confirmPassword)) + "_"))
+		s.WriteString("\n\n")
 		s.WriteString(helpStyle.Render("Enter: submit • Esc: go back"))
 	}
 
@@ -158,6 +170,9 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.step--
 			if m.step == 2 {
 				m.password = ""
+			}
+			if m.step == 3 {
+				m.confirmPassword = ""
 			}
 		} else {
 			// Use default server URL
@@ -196,13 +211,31 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.step = 3
 
 		case 3:
-			// Validate password and attempt authentication
+			// Validate password and move to next step
 			if m.password == "" {
 				m.errorMsg = "Password cannot be empty"
 				return m, nil
 			}
 			if len(m.password) < 8 {
 				m.errorMsg = "Password must be at least 8 characters"
+				return m, nil
+			}
+			
+			// For login, authenticate directly. For register, go to confirm password
+			if m.authMode == "login" {
+				return m, m.authenticate()
+			} else {
+				m.step = 4 // Go to confirm password
+			}
+
+		case 4:
+			// Confirm password and attempt registration
+			if m.confirmPassword == "" {
+				m.errorMsg = "Please confirm your password"
+				return m, nil
+			}
+			if m.password != m.confirmPassword {
+				m.errorMsg = "Passwords do not match"
 				return m, nil
 			}
 			return m, m.authenticate()
@@ -236,6 +269,10 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(m.password) > 0 {
 				m.password = m.password[:len(m.password)-1]
 			}
+		case 4:
+			if len(m.confirmPassword) > 0 {
+				m.confirmPassword = m.confirmPassword[:len(m.confirmPassword)-1]
+			}
 		}
 
 	default:
@@ -248,6 +285,8 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.username += msg.String()
 			case 3:
 				m.password += msg.String()
+			case 4:
+				m.confirmPassword += msg.String()
 			}
 		}
 	}
@@ -257,49 +296,17 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m setupModel) authenticate() tea.Cmd {
 	return func() tea.Msg {
-		endpoint := "/api/v1/auth/login"
+		var authResp *AuthResponse
+		var err error
+
 		if m.authMode == "register" {
-			endpoint = "/api/v1/auth/register"
+			authResp, err = registerUser(m.serverURL, m.username, m.password)
+		} else {
+			authResp, err = loginUser(m.serverURL, m.username, m.password)
 		}
 
-		reqBody := map[string]string{
-			"username": m.username,
-			"password": m.password,
-		}
-
-		jsonData, err := json.Marshal(reqBody)
 		if err != nil {
-			return authErrorMsg{error: "Failed to prepare request"}
-		}
-
-		resp, err := http.Post(
-			m.serverURL+endpoint,
-			"application/json",
-			bytes.NewBuffer(jsonData),
-		)
-		if err != nil {
-			return authErrorMsg{error: fmt.Sprintf("Failed to connect to server: %v", err)}
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 && resp.StatusCode != 201 {
-			var errResp map[string]interface{}
-			if json.NewDecoder(resp.Body).Decode(&errResp) == nil {
-				if errObj, ok := errResp["error"].(map[string]interface{}); ok {
-					if msg, ok := errObj["message"].(string); ok {
-						return authErrorMsg{error: msg}
-					}
-				}
-			}
-			return authErrorMsg{error: fmt.Sprintf("Authentication failed (status %d)", resp.StatusCode)}
-		}
-
-		var authResp struct {
-			Token    string `json:"token"`
-			Username string `json:"username"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
-			return authErrorMsg{error: "Failed to parse server response"}
+			return authErrorMsg{error: err.Error()}
 		}
 
 		return authSuccessMsg{

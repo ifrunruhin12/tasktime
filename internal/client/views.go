@@ -70,5 +70,96 @@ func (m model) renderTaskLine(index int, task models.Task) string {
 		project = fmt.Sprintf(" [%s]", task.Project)
 	}
 
-	return fmt.Sprintf("%s%s %s%s%s", cursor, status, task.Title, project, timer)
+	// Show assigned user for team tasks
+	assignedUser := ""
+	if task.AssignedTo != nil && *task.AssignedTo != "" {
+		assignedUser = fmt.Sprintf(" [@%s]", *task.AssignedTo)
+	}
+
+	return fmt.Sprintf("%s%s %s%s%s%s", cursor, status, task.Title, project, assignedUser, timer)
+}
+
+func (m model) renderAssignmentMode() string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("Assign Task"))
+	s.WriteString("\n\n")
+
+	// Show the task being assigned
+	if m.assigningTaskID != "" {
+		var taskTitle string
+		for _, task := range m.teamTasks {
+			if task.ID == m.assigningTaskID {
+				taskTitle = task.Title
+				if task.Project != "" {
+					taskTitle += fmt.Sprintf(" [%s]", task.Project)
+				}
+				break
+			}
+		}
+		if taskTitle != "" {
+			s.WriteString(fmt.Sprintf("Task: %s\n\n", taskTitle))
+		}
+	}
+
+	s.WriteString("Assign to:\n")
+
+	// Add "Unassign" option at the top
+	unassignOption := "[Unassign]"
+	if m.assignmentCursor == 0 {
+		s.WriteString(selectedStyle.Render("▶ " + unassignOption))
+	} else {
+		s.WriteString(normalStyle.Render("  " + unassignOption))
+	}
+	s.WriteString("\n")
+
+	// List online users
+	for i, username := range m.assignmentUsers {
+		userLine := username
+		if m.config != nil && username == m.config.Username {
+			userLine += " (you)"
+		}
+		
+		if m.assignmentCursor == i+1 {
+			s.WriteString(selectedStyle.Render("▶ " + userLine))
+		} else {
+			s.WriteString(normalStyle.Render("  " + userLine))
+		}
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("↑/↓: navigate • Enter: select • Esc: cancel"))
+
+	return s.String()
+}
+
+func (m model) renderUsersListMode() string {
+	var s strings.Builder
+
+	s.WriteString(titleStyle.Render("Online Users"))
+	s.WriteString("\n\n")
+
+	if len(m.usersListData) == 0 {
+		s.WriteString("No users online\n\n")
+	} else {
+		// Display all online users
+		for _, username := range m.usersListData {
+			userLine := "● " + username
+			// Highlight current user
+			if m.config != nil && username == m.config.Username {
+				userLine += " (you)"
+			}
+			s.WriteString(normalStyle.Render(userLine))
+			s.WriteString("\n")
+		}
+		s.WriteString("\n")
+		
+		// Show total count
+		s.WriteString(fmt.Sprintf("Total: %d users online\n\n", len(m.usersListData)))
+	}
+
+	s.WriteString(helpStyle.Render("Press any key to return"))
+
+	return s.String()
 }

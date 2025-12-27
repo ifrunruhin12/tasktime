@@ -5,15 +5,15 @@ services:
     image: postgres:15-alpine
     container_name: timetask-db
     environment:
-      POSTGRES_DB: timetask
-      POSTGRES_USER: timetask
-      POSTGRES_PASSWORD: timetask
+      POSTGRES_DB: tasktime
+      POSTGRES_USER: tasktime
+      POSTGRES_PASSWORD: tasktime
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timetask -d timetask"]
+      test: ["CMD-SHELL", "pg_isready -U tasktime -d tasktime"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,7 +22,7 @@ services:
     build: .
     container_name: timetask-server
     environment:
-      DATABASE_URL: "postgres://timetask:timetask@postgres:5432/timetask?sslmode=disable"
+      DATABASE_URL: "postgres://tasktime:tasktime@postgres:5432/tasktime?sslmode=disable"
       JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
       PORT: "8080"
     ports:

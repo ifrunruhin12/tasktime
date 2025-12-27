@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -118,6 +119,7 @@ func (c *Client) initialModel() model {
 		currentSection: "personal", // Start with personal tasks
 		localStore:     localStore,
 		config:         c.config,
+		currentFilter:  "all", // Default to showing all tasks
 	}
 }
 
@@ -136,6 +138,28 @@ type model struct {
 	currentSection string // "personal" or "team"
 	localStore     *storage.LocalStore
 	config         *ClientConfig
+	onlineUsers    int // Count of online users
+	
+	// Assignment UI state
+	showAssignment    bool
+	assignmentCursor  int
+	assignmentUsers   []string
+	assigningTaskID   string
+	
+	// Filter state
+	currentFilter string // "my" or "all"
+	
+	// Users list UI state
+	showUsersList     bool
+	usersListData     []string
+	
+	// Error handling state
+	errorMessage   string    // Current error message to display
+	errorExpiry    time.Time // When the error message should be cleared
+	
+	// Reconnection state
+	reconnectAttempts int  // Number of reconnection attempts
+	isReconnecting    bool // Whether we're currently trying to reconnect
 }
 
 type personalTasksLoadedMsg []models.Task
@@ -147,6 +171,19 @@ type wsDisconnectedMsg struct{}
 type wsConnectionFailedMsg struct{}
 type wsRetryMsg struct{}
 type taskOperationFailedMsg struct{}
+type onlineUsersLoadedMsg []string
+type taskAssignedMsg struct{}
+type usersListLoadedMsg []string
+type clearErrorMsg struct{}
+type errorMsg struct {
+	message string
+}
+type clientAuthErrorMsg struct {
+	message string
+}
+type reconnectMsg struct {
+	delay time.Duration
+}
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
@@ -168,6 +205,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showInput {
 			return m.handleInputKeys(msg)
 		}
+		if m.showAssignment {
+			return m.handleAssignmentKeys(msg)
+		}
+		if m.showUsersList {
+			return m.handleUsersListKeys(msg)
+		}
 		return m.handleNormalKeys(msg)
 
 	case personalTasksLoadedMsg:
@@ -180,6 +223,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case wsConnectedMsg:
 		m.ws = msg
+		m.isReconnecting = false
+		m.reconnectAttempts = 0
+		m.errorMessage = "" // Clear any reconnection error message
 		return m, m.listenWebSocket()
 
 	case tickMsg:
@@ -196,19 +242,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadTeamTasks()
 
 	case wsDisconnectedMsg:
-		// WebSocket disconnected, try to reconnect
+		// WebSocket disconnected, try to reconnect with exponential backoff
 		m.ws = nil
-		return m, m.connectWebSocket()
+		m.isReconnecting = true
+		delay := m.calculateBackoffDelay()
+		m.errorMessage = fmt.Sprintf("Connection lost. Reconnecting in %v...", delay.Round(time.Second))
+		m.errorExpiry = time.Now().Add(delay + time.Second)
+		return m, tea.Tick(delay, func(t time.Time) tea.Msg {
+			return reconnectMsg{delay: delay}
+		})
 
 	case wsConnectionFailedMsg:
-		// WebSocket connection failed, try again after a delay
+		// WebSocket connection failed, try again with exponential backoff
 		m.ws = nil
-		return m, tea.Tick(time.Second*5, func(t time.Time) tea.Msg {
-			return wsRetryMsg{}
+		m.isReconnecting = true
+		delay := m.calculateBackoffDelay()
+		m.errorMessage = fmt.Sprintf("Connection failed. Retrying in %v...", delay.Round(time.Second))
+		m.errorExpiry = time.Now().Add(delay + time.Second)
+		return m, tea.Tick(delay, func(t time.Time) tea.Msg {
+			return reconnectMsg{delay: delay}
 		})
 
 	case wsRetryMsg:
-		// Retry WebSocket connection
+		// Legacy retry message - redirect to reconnect
+		return m, m.connectWebSocket()
+
+	case reconnectMsg:
+		// Attempt reconnection
+		m.reconnectAttempts++
 		return m, m.connectWebSocket()
 
 	case taskOperationFailedMsg:
@@ -217,6 +278,56 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loadPersonalTasks()
 		}
 		return m, m.loadTeamTasks()
+
+	case onlineUsersLoadedMsg:
+		m.assignmentUsers = []string(msg)
+		m.showAssignment = true
+		m.assignmentCursor = 0
+		return m, nil
+
+	case taskAssignedMsg:
+		// Task assigned successfully, reload tasks and close assignment screen
+		m.showAssignment = false
+		return m, m.loadTeamTasks()
+
+	case usersListLoadedMsg:
+		m.usersListData = []string(msg)
+		m.showUsersList = true
+		return m, nil
+
+	case errorMsg:
+		m.errorMessage = msg.message
+		m.errorExpiry = time.Now().Add(5 * time.Second)
+		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return clearErrorMsg{}
+		})
+
+	case clearErrorMsg:
+		// Only clear if the error has expired
+		if time.Now().After(m.errorExpiry) {
+			m.errorMessage = ""
+		}
+		return m, nil
+
+	case clientAuthErrorMsg:
+		// Handle authentication errors - clear token and show error
+		m.errorMessage = msg.message
+		m.errorExpiry = time.Now().Add(5 * time.Second)
+		// Clear stored token
+		if m.config != nil {
+			m.config.AuthToken = ""
+			if m.client.configManager != nil {
+				m.client.configManager.Save(m.config)
+			}
+		}
+		// Close WebSocket connection if open
+		if m.ws != nil {
+			m.ws.Close()
+			m.ws = nil
+		}
+		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return clearErrorMsg{}
+		})
 	}
 
 	return m, nil
@@ -226,20 +337,55 @@ func (m model) View() string {
 	if m.showInput {
 		return m.renderInputMode()
 	}
+	
+	if m.showAssignment {
+		return m.renderAssignmentMode()
+	}
+	
+	if m.showUsersList {
+		return m.renderUsersListMode()
+	}
 
 	var s strings.Builder
 
-	// Title with WebSocket status and username
-	title := "TaskTime - Dual Task Manager"
+	// Display error banner at top if there's an error
+	if m.errorMessage != "" {
+		s.WriteString(errorStyle.Render("⚠ " + m.errorMessage))
+		s.WriteString("\n\n")
+	}
+
+	// Enhanced status bar with username, online users count, and connection status
+	statusBar := "TaskTime v1.0.0"
+	
+	// Show username if available
 	if m.config != nil && m.config.Username != "" {
-		title = "TaskTime - " + m.config.Username
+		statusBar += " | Connected as: " + m.config.Username
 	}
+	
+	// Show online users count
+	if m.onlineUsers > 0 {
+		statusBar += fmt.Sprintf(" | Online: %d users", m.onlineUsers)
+	}
+	
+	// Show connection status
 	if m.ws != nil {
-		title += " [LIVE]"
+		statusBar += " | Server: LIVE"
+	} else if m.isReconnecting {
+		statusBar += " | Server: RECONNECTING..."
 	} else {
-		title += " [OFFLINE]"
+		statusBar += " | Server: OFFLINE"
 	}
-	s.WriteString(titleStyle.Render(title))
+	
+	// Show current filter for team tasks
+	if m.currentSection == "team" {
+		if m.currentFilter == "my" {
+			statusBar += " | Filter: My Tasks"
+		} else {
+			statusBar += " | Filter: All Tasks"
+		}
+	}
+	
+	s.WriteString(titleStyle.Render(statusBar))
 	s.WriteString("\n\n")
 
 	// Section tabs
@@ -249,14 +395,16 @@ func (m model) View() string {
 	if m.currentSection == "personal" {
 		personalTab = "▶ " + personalTab + " ◀"
 		teamTab = "  " + teamTab + "  "
+		s.WriteString(selectedStyle.Render(personalTab))
+		s.WriteString("   ")
+		s.WriteString(normalStyle.Render(teamTab))
 	} else {
 		personalTab = "  " + personalTab + "  "
 		teamTab = "▶ " + teamTab + " ◀"
+		s.WriteString(normalStyle.Render(personalTab))
+		s.WriteString("   ")
+		s.WriteString(selectedStyle.Render(teamTab))
 	}
-
-	s.WriteString(selectedStyle.Render(personalTab))
-	s.WriteString("   ")
-	s.WriteString(normalStyle.Render(teamTab))
 	s.WriteString("\n\n")
 
 	// Get current tasks based on section
@@ -280,7 +428,28 @@ func (m model) View() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString(helpStyle.Render("tab: switch • n: new • d: done • s: timer • x: delete • r: refresh • q: quit"))
+	helpText := "tab: switch • n: new • d: done • s: timer • u: users • x: delete • r: refresh • q: quit"
+	if m.currentSection == "team" {
+		helpText = "tab: switch • n: new • d: done • s: timer • a: assign • f: filter • u: users • x: delete • r: refresh • q: quit"
+	}
+	s.WriteString(helpStyle.Render(helpText))
 
 	return s.String()
+}
+
+// calculateBackoffDelay returns the delay for the next reconnection attempt
+// using exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+func (m model) calculateBackoffDelay() time.Duration {
+	baseDelay := time.Second
+	maxDelay := 30 * time.Second
+	
+	// Calculate exponential delay: 2^attempts seconds
+	delay := baseDelay * time.Duration(1<<uint(m.reconnectAttempts))
+	
+	// Cap at maximum delay
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	
+	return delay
 }
