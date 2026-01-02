@@ -1,203 +1,126 @@
 package server
 
 import (
-	"fmt"
-	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
 )
 
-type LogLevel int
+var logger *slog.Logger
 
-const (
-	DEBUG LogLevel = iota
-	INFO
-	WARN
-	ERROR
-)
-
-func (l LogLevel) String() string {
-	switch l {
-	case DEBUG:
-		return "DEBUG"
-	case INFO:
-		return "INFO"
-	case WARN:
-		return "WARN"
-	case ERROR:
-		return "ERROR"
+// InitLogger initializes the global slog logger for the server
+func InitLogger(level string, logFile string) error {
+	// Parse log level
+	var slogLevel slog.Level
+	switch level {
+	case "DEBUG", "debug":
+		slogLevel = slog.LevelDebug
+	case "INFO", "info":
+		slogLevel = slog.LevelInfo
+	case "WARN", "warn", "WARNING", "warning":
+		slogLevel = slog.LevelWarn
+	case "ERROR", "error":
+		slogLevel = slog.LevelError
 	default:
-		return "UNKNOWN"
+		slogLevel = slog.LevelInfo
 	}
-}
 
-type Logger struct {
-	level      LogLevel
-	output     io.Writer
-	mu         sync.Mutex
-	file       *os.File
-	maxSize    int64 // Maximum file size in bytes before rotation
-	maxBackups int   // Maximum number of old log files to keep
-}
-
-func NewLogger(level LogLevel, logFile string) (*Logger, error) {
-	logger := &Logger{
-		level:      level,
-		maxSize:    100 * 1024 * 1024, // 100MB default
-		maxBackups: 10,
-	}
+	var handler slog.Handler
 
 	if logFile == "" {
-		logger.output = os.Stdout
-		return logger, nil
+		// Log to stdout
+		opts := &slog.HandlerOptions{
+			Level: slogLevel,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.TimeKey {
+					return slog.Attr{
+						Key:   a.Key,
+						Value: slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05")),
+					}
+				}
+				return a
+			},
+		}
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	} else {
+		// Log to file
+		logDir := filepath.Dir(logFile)
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return err
+		}
+
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return err
+		}
+
+		opts := &slog.HandlerOptions{
+			Level: slogLevel,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.TimeKey {
+					return slog.Attr{
+						Key:   a.Key,
+						Value: slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05")),
+					}
+				}
+				return a
+			},
+		}
+		handler = slog.NewTextHandler(file, opts)
 	}
 
-	logDir := filepath.Dir(logFile)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create log directory: %w", err)
-	}
-
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	logger.file = file
-	logger.output = file
-
-	return logger, nil
-}
-
-func (l *Logger) Close() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.file != nil {
-		return l.file.Close()
-	}
+	logger = slog.New(handler).With("component", "server")
 	return nil
 }
 
-func (l *Logger) SetLevel(level LogLevel) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.level = level
+// GetLogger returns the global logger instance
+func GetLogger() *slog.Logger {
+	if logger == nil {
+		// Fallback to default logger if not initialized
+		return slog.Default()
+	}
+	return logger
 }
 
-func (l *Logger) log(level LogLevel, message string, context map[string]interface{}) {
-	if level < l.level {
-		return
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.file != nil {
-		l.rotateIfNeeded()
-	}
-
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	logLine := fmt.Sprintf("[%s] %s | %s", level.String(), timestamp, message)
-
-	if len(context) > 0 {
-		logLine += " |"
-		for key, value := range context {
-			logLine += fmt.Sprintf(" %s=%v", key, value)
-		}
-	}
-
-	logLine += "\n"
-
-	l.output.Write([]byte(logLine))
+// Convenience functions for logging
+func LogDebug(msg string, args ...any) {
+	GetLogger().Debug(msg, args...)
 }
 
-func (l *Logger) rotateIfNeeded() {
-	if l.file == nil {
-		return
-	}
-
-	info, err := l.file.Stat()
-	if err != nil {
-		return
-	}
-
-	if info.Size() < l.maxSize {
-		return
-	}
-
-	l.file.Close()
-
-	logPath := l.file.Name()
-	for i := l.maxBackups - 1; i >= 0; i-- {
-		oldPath := fmt.Sprintf("%s.%d", logPath, i)
-		newPath := fmt.Sprintf("%s.%d", logPath, i+1)
-
-		if i == l.maxBackups-1 {
-			os.Remove(newPath)
-		}
-
-		if _, err := os.Stat(oldPath); err == nil {
-			os.Rename(oldPath, newPath)
-		}
-	}
-
-	os.Rename(logPath, fmt.Sprintf("%s.0", logPath))
-
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		l.output = os.Stdout
-		return
-	}
-
-	l.file = file
-	l.output = file
+func LogInfo(msg string, args ...any) {
+	GetLogger().Info(msg, args...)
 }
 
-func (l *Logger) Debug(message string, context ...map[string]interface{}) {
-	ctx := make(map[string]interface{})
-	if len(context) > 0 {
-		ctx = context[0]
-	}
-	l.log(DEBUG, message, ctx)
+func LogWarn(msg string, args ...any) {
+	GetLogger().Warn(msg, args...)
 }
 
-func (l *Logger) Info(message string, context ...map[string]interface{}) {
-	ctx := make(map[string]interface{})
-	if len(context) > 0 {
-		ctx = context[0]
-	}
-	l.log(INFO, message, ctx)
+func LogError(msg string, args ...any) {
+	GetLogger().Error(msg, args...)
 }
 
-func (l *Logger) Warn(message string, context ...map[string]interface{}) {
-	ctx := make(map[string]interface{})
-	if len(context) > 0 {
-		ctx = context[0]
-	}
-	l.log(WARN, message, ctx)
+// Specialized logging functions
+func LogHTTPRequest(method, path string, statusCode int, duration int64, args ...any) {
+	allArgs := append([]any{
+		"method", method,
+		"path", path,
+		"status", statusCode,
+		"duration_ms", duration,
+	}, args...)
+	GetLogger().Info("HTTP request", allArgs...)
 }
 
-func (l *Logger) Error(message string, context ...map[string]interface{}) {
-	ctx := make(map[string]interface{})
-	if len(context) > 0 {
-		ctx = context[0]
-	}
-	l.log(ERROR, message, ctx)
+func LogAuthEvent(event string, args ...any) {
+	allArgs := append([]any{"event", event}, args...)
+	GetLogger().Info("Auth event", allArgs...)
 }
 
-func ParseLogLevel(level string) LogLevel {
-	switch level {
-	case "DEBUG", "debug":
-		return DEBUG
-	case "INFO", "info":
-		return INFO
-	case "WARN", "warn", "WARNING", "warning":
-		return WARN
-	case "ERROR", "error":
-		return ERROR
-	default:
-		return INFO
-	}
+func LogWebSocketEvent(event string, args ...any) {
+	allArgs := append([]any{"event", event}, args...)
+	GetLogger().Info("WebSocket event", allArgs...)
+}
+
+func LogDatabaseEvent(event string, args ...any) {
+	allArgs := append([]any{"event", event}, args...)
+	GetLogger().Info("Database event", allArgs...)
 }

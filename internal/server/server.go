@@ -26,7 +26,6 @@ type Server struct {
 	onlineUsers       map[string]bool          // Deprecated: use connectionManager instead
 	mu                sync.RWMutex
 	startTime         time.Time
-	logger            *Logger
 }
 
 var upgrader = websocket.Upgrader{
@@ -49,12 +48,18 @@ func New() (*Server, error) {
 		return nil, err
 	}
 
-	logLevel := ParseLogLevel(os.Getenv("LOG_LEVEL"))
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
 	logFile := os.Getenv("LOG_FILE")
-	logger, err := NewLogger(logLevel, logFile)
+	
+	err = InitLogger(logLevel, logFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
+
+	LogInfo("Server initializing", "log_level", logLevel, "log_file", logFile)
 
 	return &Server{
 		store:             store,
@@ -63,7 +68,6 @@ func New() (*Server, error) {
 		clients:           make(map[*websocket.Conn]bool),
 		onlineUsers:       make(map[string]bool),
 		startTime:         time.Now(),
-		logger:            logger,
 	}, nil
 }
 
@@ -115,10 +119,10 @@ func (s *Server) broadcast(message interface{}) {
 		}
 	}
 
-	s.logger.Debug("Broadcasting message", map[string]interface{}{
-		"type":         wsMsg.Type,
-		"online_users": s.connectionManager.GetOnlineUserCount(),
-	})
+	LogDebug("Broadcasting message",
+		"type", wsMsg.Type,
+		"online_users", s.connectionManager.GetOnlineUserCount(),
+	)
 
 	s.connectionManager.BroadcastToAll(wsMsg)
 }
@@ -153,9 +157,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateTaskRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.logger.Warn("Task creation failed: invalid request", map[string]interface{}{
-			"error": err.Error(),
-		})
+		LogWarn("Task creation failed: invalid request",
+		"error", err.Error(),
+	)
 		http.Error(w, err.Error(), 400)
 		return
 	}
@@ -164,22 +168,22 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 
 	task, err := s.store.CreateTask(req.Title, req.Project, username)
 	if err != nil {
-		s.logger.Error("Task creation failed: database error", map[string]interface{}{
-			"username": username,
-			"title":    req.Title,
-			"project":  req.Project,
-			"error":    err.Error(),
-		})
+		LogError("Task creation failed: database error",
+		"username", username,
+		"title", req.Title,
+		"project", req.Project,
+		"error", err.Error(),
+	)
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
-	s.logger.Info("Task created", map[string]interface{}{
-		"task_id":  task.ID,
-		"username": username,
-		"title":    task.Title,
-		"project":  task.Project,
-	})
+	LogInfo("Task created",
+		"task_id", task.ID,
+		"username", username,
+		"title", task.Title,
+		"project", task.Project,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type:    "task.created",
@@ -196,30 +200,30 @@ func (s *Server) updateTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req models.UpdateStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.logger.Warn("Task update failed: invalid request", map[string]interface{}{
-			"task_id": taskID,
-			"error":   err.Error(),
-		})
+		LogWarn("Task update failed: invalid request",
+		"task_id", taskID,
+		"error", err.Error(),
+	)
 		http.Error(w, err.Error(), 400)
 		return
 	}
 
 	task, err := s.store.UpdateTaskStatus(taskID, req.Status)
 	if err != nil {
-		s.logger.Warn("Task update failed: task not found", map[string]interface{}{
-			"task_id":  taskID,
-			"username": username,
-			"error":    err.Error(),
-		})
+		LogWarn("Task update failed: task not found",
+		"task_id", taskID,
+		"username", username,
+		"error", err.Error(),
+	)
 		http.Error(w, "Task not found", 404)
 		return
 	}
 
-	s.logger.Info("Task status updated", map[string]interface{}{
-		"task_id":  task.ID,
-		"username": username,
-		"status":   task.Status,
-	})
+	LogInfo("Task status updated",
+		"task_id", task.ID,
+		"username", username,
+		"status", task.Status,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type:    "task.updated",
@@ -236,19 +240,19 @@ func (s *Server) deleteTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.store.DeleteTask(taskID)
 	if err != nil {
-		s.logger.Warn("Task deletion failed: task not found", map[string]interface{}{
-			"task_id":  taskID,
-			"username": username,
-			"error":    err.Error(),
-		})
+		LogWarn("Task deletion failed: task not found",
+		"task_id", taskID,
+		"username", username,
+		"error", err.Error(),
+	)
 		http.Error(w, "Task not found", 404)
 		return
 	}
 
-	s.logger.Info("Task deleted", map[string]interface{}{
-		"task_id":  taskID,
-		"username": username,
-	})
+	LogInfo("Task deleted",
+		"task_id", taskID,
+		"username", username,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type:    "task.deleted",
@@ -264,20 +268,20 @@ func (s *Server) startTimer(w http.ResponseWriter, r *http.Request) {
 
 	task, err := s.store.StartTimer(taskID)
 	if err != nil {
-		s.logger.Warn("Timer start failed: task not found", map[string]interface{}{
-			"task_id":  taskID,
-			"username": username,
-			"error":    err.Error(),
-		})
+		LogWarn("Timer start failed: task not found",
+		"task_id", taskID,
+		"username", username,
+		"error", err.Error(),
+	)
 		http.Error(w, "Task not found", 404)
 		return
 	}
 
-	s.logger.Info("Timer started", map[string]interface{}{
-		"task_id":  task.ID,
-		"username": username,
-		"title":    task.Title,
-	})
+	LogInfo("Timer started",
+		"task_id", task.ID,
+		"username", username,
+		"title", task.Title,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type:    "task.updated",
@@ -294,21 +298,21 @@ func (s *Server) stopTimer(w http.ResponseWriter, r *http.Request) {
 
 	task, err := s.store.StopTimer(taskID)
 	if err != nil {
-		s.logger.Warn("Timer stop failed: task not found", map[string]interface{}{
-			"task_id":  taskID,
-			"username": username,
-			"error":    err.Error(),
-		})
+		LogWarn("Timer stop failed: task not found",
+		"task_id", taskID,
+		"username", username,
+		"error", err.Error(),
+	)
 		http.Error(w, "Task not found", 404)
 		return
 	}
 
-	s.logger.Info("Timer stopped", map[string]interface{}{
-		"task_id":            task.ID,
-		"username":           username,
-		"title":              task.Title,
-		"total_time_seconds": task.TotalTimeSeconds,
-	})
+	LogInfo("Timer stopped",
+		"task_id", task.ID,
+		"username", username,
+		"title", task.Title,
+		"total_time_seconds", task.TotalTimeSeconds,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type:    "task.updated",
@@ -322,26 +326,26 @@ func (s *Server) stopTimer(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.logger.Error("WebSocket upgrade failed", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    r.RemoteAddr,
-		})
+		LogError("WebSocket upgrade failed",
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		return
 	}
 
-	s.logger.Debug("WebSocket connection established, waiting for authentication", map[string]interface{}{
-		"ip": r.RemoteAddr,
-	})
+	LogDebug("WebSocket connection established, waiting for authentication",
+		"ip", r.RemoteAddr,
+	)
 
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
 	var authMsg models.WSMessage
 	err = conn.ReadJSON(&authMsg)
 	if err != nil {
-		s.logger.Warn("WebSocket auth failed: failed to read auth message", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    r.RemoteAddr,
-		})
+		LogWarn("WebSocket auth failed: failed to read auth message",
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		conn.WriteJSON(models.WSMessage{
 			Type: "auth.failed",
 			Payload: map[string]string{
@@ -353,10 +357,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if authMsg.Type != "auth" {
-		s.logger.Warn("WebSocket auth failed: expected auth message", map[string]interface{}{
-			"received_type": authMsg.Type,
-			"ip":            r.RemoteAddr,
-		})
+		LogWarn("WebSocket auth failed: expected auth message",
+		"received_type", authMsg.Type,
+		"ip", r.RemoteAddr,
+	)
 		conn.WriteJSON(models.WSMessage{
 			Type: "auth.failed",
 			Payload: map[string]string{
@@ -369,9 +373,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	payload, ok := authMsg.Payload.(map[string]interface{})
 	if !ok {
-		s.logger.Warn("WebSocket auth failed: invalid payload format", map[string]interface{}{
-			"ip": r.RemoteAddr,
-		})
+		LogWarn("WebSocket auth failed: invalid payload format",
+		"ip", r.RemoteAddr,
+	)
 		conn.WriteJSON(models.WSMessage{
 			Type: "auth.failed",
 			Payload: map[string]string{
@@ -384,9 +388,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	token, ok := payload["token"].(string)
 	if !ok || token == "" {
-		s.logger.Warn("WebSocket auth failed: missing or invalid token", map[string]interface{}{
-			"ip": r.RemoteAddr,
-		})
+		LogWarn("WebSocket auth failed: missing or invalid token",
+		"ip", r.RemoteAddr,
+	)
 		conn.WriteJSON(models.WSMessage{
 			Type: "auth.failed",
 			Payload: map[string]string{
@@ -400,10 +404,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Validate JWT token
 	username, err := s.authManager.ValidateToken(token)
 	if err != nil {
-		s.logger.Warn("WebSocket auth failed: token validation failed", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    r.RemoteAddr,
-		})
+		LogWarn("WebSocket auth failed: token validation failed",
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		conn.WriteJSON(models.WSMessage{
 			Type: "auth.failed",
 			Payload: map[string]string{
@@ -414,10 +418,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Info("WebSocket connection authenticated", map[string]interface{}{
-		"username": username,
-		"ip":       r.RemoteAddr,
-	})
+	LogInfo("WebSocket connection authenticated",
+		"username", username,
+		"ip", r.RemoteAddr,
+	)
 
 	conn.SetReadDeadline(time.Time{})
 
@@ -450,16 +454,16 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				"timestamp": time.Now().Format(time.RFC3339),
 			},
 		})
-		s.logger.Info("User disconnected", map[string]interface{}{
-			"username":     username,
-			"online_users": s.connectionManager.GetOnlineUserCount(),
-		})
+		LogInfo("User disconnected",
+		"username", username,
+		"online_users", s.connectionManager.GetOnlineUserCount(),
+	)
 	}()
 
-	s.logger.Info("User joined", map[string]interface{}{
-		"username":     username,
-		"online_users": len(onlineUsers),
-	})
+	LogInfo("User joined",
+		"username", username,
+		"online_users", len(onlineUsers),
+	)
 
 	s.store.UpdateUserLastSeen(username)
 
@@ -475,10 +479,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for range pingTicker.C {
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				s.logger.Debug("Failed to send ping", map[string]interface{}{
-					"username": username,
-					"error":    err.Error(),
-				})
+				LogDebug("Failed to send ping",
+		"username", username,
+		"error", err.Error(),
+	)
 				return
 			}
 		}
@@ -489,18 +493,18 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				s.logger.Warn("WebSocket unexpected close", map[string]interface{}{
-					"username": username,
-					"error":    err.Error(),
-				})
+				LogWarn("WebSocket unexpected close",
+		"username", username,
+		"error", err.Error(),
+	)
 			}
 			break
 		}
 
-		s.logger.Debug("Received WebSocket message", map[string]interface{}{
-			"username": username,
-			"type":     msg.Type,
-		})
+		LogDebug("Received WebSocket message",
+		"username", username,
+		"type", msg.Type,
+	)
 	}
 }
 
@@ -510,10 +514,10 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request) {
 
 	var req models.AssignTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.logger.Warn("Task assignment failed: invalid request", map[string]interface{}{
-			"task_id": taskID,
-			"error":   err.Error(),
-		})
+		LogWarn("Task assignment failed: invalid request",
+		"task_id", taskID,
+		"error", err.Error(),
+	)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -521,29 +525,29 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request) {
 	if req.AssignedTo != nil && *req.AssignedTo != "" {
 		user, err := s.store.GetUserByUsername(*req.AssignedTo)
 		if err != nil {
-			s.logger.Error("Task assignment failed: database error", map[string]interface{}{
-				"task_id": taskID,
-				"error":   err.Error(),
-			})
+			LogError("Task assignment failed: database error",
+		"task_id", taskID,
+		"error", err.Error(),
+	)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 		if user == nil {
-			s.logger.Warn("Task assignment failed: user not found", map[string]interface{}{
-				"task_id":     taskID,
-				"assigned_to": *req.AssignedTo,
-				"assigned_by": assignedBy,
-			})
+			LogWarn("Task assignment failed: user not found",
+		"task_id", taskID,
+		"assigned_to", *req.AssignedTo,
+		"assigned_by", assignedBy,
+	)
 			http.Error(w, "User not found", http.StatusBadRequest)
 			return
 		}
 
 		if !s.connectionManager.IsUserOnline(*req.AssignedTo) {
-			s.logger.Warn("Task assignment failed: user not online", map[string]interface{}{
-				"task_id":     taskID,
-				"assigned_to": *req.AssignedTo,
-				"assigned_by": assignedBy,
-			})
+			LogWarn("Task assignment failed: user not online",
+		"task_id", taskID,
+		"assigned_to", *req.AssignedTo,
+		"assigned_by", assignedBy,
+	)
 			http.Error(w, "User is not online", http.StatusBadRequest)
 			return
 		}
@@ -551,11 +555,11 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request) {
 
 	task, err := s.store.AssignTask(taskID, req.AssignedTo)
 	if err != nil {
-		s.logger.Warn("Task assignment failed: task not found", map[string]interface{}{
-			"task_id":     taskID,
-			"assigned_by": assignedBy,
-			"error":       err.Error(),
-		})
+		LogWarn("Task assignment failed: task not found",
+		"task_id", taskID,
+		"assigned_by", assignedBy,
+		"error", err.Error(),
+	)
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
@@ -565,11 +569,11 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request) {
 		assignedToStr = *task.AssignedTo
 	}
 
-	s.logger.Info("Task assignment changed", map[string]interface{}{
-		"task_id":     task.ID,
-		"assigned_to": assignedToStr,
-		"assigned_by": assignedBy,
-	})
+	LogInfo("Task assignment changed",
+		"task_id", task.ID,
+		"assigned_to", assignedToStr,
+		"assigned_by", assignedBy,
+	)
 
 	s.broadcast(models.WSMessage{
 		Type: "task.assigned",

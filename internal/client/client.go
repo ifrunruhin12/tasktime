@@ -27,32 +27,49 @@ func New(serverURL string) *Client {
 }
 
 func (c *Client) Start() error {
+	LogInfo("Client start requested")
+	
 	// Check if config exists
 	if c.configManager != nil && c.configManager.Exists() {
+		LogInfo("Existing config found, attempting to load")
+		
 		// Load existing config
 		config, err := c.configManager.Load()
 		if err == nil && config.AutoConnect && config.AuthToken != "" {
+			LogInfo("Auto-connect enabled with stored token", "username", config.Username, "server_url", config.ServerURL)
+			
 			// Use config values
 			c.config = config
 			c.serverURL = config.ServerURL
 
 			// Validate token and start main app
 			if c.validateToken(config.AuthToken) {
+				LogInfo("Token validation successful, starting main application")
 				p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
 				_, err := p.Run()
 				return err
+			} else {
+				LogWarn("Token validation failed, proceeding to setup")
 			}
+		} else {
+			LogInfo("Config loaded but auto-connect disabled or no token", "auto_connect", config != nil && config.AutoConnect, "has_token", config != nil && config.AuthToken != "")
 		}
+	} else {
+		LogInfo("No existing config found")
 	}
 
 	// No valid config, run setup flow
+	LogInfo("Starting setup flow")
 	return c.runSetup()
 }
 
 func (c *Client) runSetup() error {
+	LogInfo("Running setup flow")
+	
 	if c.configManager == nil {
 		cm, err := NewConfigManager()
 		if err != nil {
+			LogError("Failed to create config manager", "error", err.Error())
 			return err
 		}
 		c.configManager = cm
@@ -63,6 +80,7 @@ func (c *Client) runSetup() error {
 
 	_, err := p.Run()
 	if err != nil {
+		LogError("Setup flow failed", "error", err.Error())
 		return err
 	}
 
@@ -70,6 +88,7 @@ func (c *Client) runSetup() error {
 	if c.configManager.Exists() {
 		config, err := c.configManager.Load()
 		if err == nil && config.AuthToken != "" {
+			LogInfo("Setup completed successfully, starting main application", "username", config.Username)
 			c.config = config
 			c.serverURL = config.ServerURL
 
@@ -77,6 +96,8 @@ func (c *Client) runSetup() error {
 			p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
 			_, err := p.Run()
 			return err
+		} else {
+			LogWarn("Setup completed but no valid config found", "config_exists", c.configManager.Exists(), "has_token", config != nil && config.AuthToken != "")
 		}
 	}
 
@@ -85,12 +106,16 @@ func (c *Client) runSetup() error {
 
 func (c *Client) validateToken(token string) bool {
 	if token == "" {
+		LogWarn("Token validation failed: empty token")
 		return false
 	}
+
+	LogDebug("Validating token with server", "server_url", c.serverURL)
 
 	// Try to validate token with the server
 	req, err := http.NewRequest("GET", c.serverURL+"/api/v1/users/me", nil)
 	if err != nil {
+		LogError("Failed to create token validation request", "error", err.Error())
 		return false
 	}
 
@@ -99,11 +124,19 @@ func (c *Client) validateToken(token string) bool {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		LogError("Token validation request failed", "error", err.Error())
 		return false
 	}
 	defer resp.Body.Close()
 
-	return resp.StatusCode == 200
+	success := resp.StatusCode == 200
+	if success {
+		LogInfo("Token validation successful")
+	} else {
+		LogWarn("Token validation failed", "status_code", resp.StatusCode)
+	}
+
+	return success
 }
 
 func (c *Client) initialModel() model {
@@ -222,6 +255,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case wsConnectedMsg:
+		LogWebSocketEvent("connected", "server_url", m.client.serverURL)
 		m.ws = msg
 		m.isReconnecting = false
 		m.reconnectAttempts = 0
@@ -242,6 +276,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadTeamTasks()
 
 	case wsDisconnectedMsg:
+		LogWebSocketEvent("disconnected", "reconnect_attempts", m.reconnectAttempts)
 		// WebSocket disconnected, try to reconnect with exponential backoff
 		m.ws = nil
 		m.isReconnecting = true
@@ -253,6 +288,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case wsConnectionFailedMsg:
+		LogWebSocketEvent("connection_failed", "reconnect_attempts", m.reconnectAttempts)
 		// WebSocket connection failed, try again with exponential backoff
 		m.ws = nil
 		m.isReconnecting = true
@@ -268,6 +304,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.connectWebSocket()
 
 	case reconnectMsg:
+		LogWebSocketEvent("reconnect_attempt", "attempt", m.reconnectAttempts+1, "delay", msg.delay)
 		// Attempt reconnection
 		m.reconnectAttempts++
 		return m, m.connectWebSocket()
@@ -310,6 +347,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case clientAuthErrorMsg:
+		LogAuthEvent("authentication_error", "message", msg.message)
 		// Handle authentication errors - clear token and show error
 		m.errorMessage = msg.message
 		m.errorExpiry = time.Now().Add(5 * time.Second)

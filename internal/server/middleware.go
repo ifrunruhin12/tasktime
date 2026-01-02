@@ -18,7 +18,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			s.logger.Warn("Token validation failed: missing authorization header", map[string]interface{}{
+			LogWarn("Token validation failed: missing authorization header", map[string]interface{}{
 				"ip":   r.RemoteAddr,
 				"path": r.URL.Path,
 			})
@@ -28,7 +28,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			s.logger.Warn("Token validation failed: invalid header format", map[string]interface{}{
+			LogWarn("Token validation failed: invalid header format", map[string]interface{}{
 				"ip":   r.RemoteAddr,
 				"path": r.URL.Path,
 			})
@@ -41,14 +41,14 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		username, err := s.authManager.ValidateToken(token)
 		if err != nil {
 			if err == auth.ErrTokenExpired {
-				s.logger.Warn("Token validation failed: token expired", map[string]interface{}{
+				LogWarn("Token validation failed: token expired", map[string]interface{}{
 					"ip":   r.RemoteAddr,
 					"path": r.URL.Path,
 				})
 				sendErrorResponse(w, "TOKEN_EXPIRED", "Token has expired", http.StatusUnauthorized)
 				return
 			}
-			s.logger.Warn("Token validation failed: invalid token", map[string]interface{}{
+			LogWarn("Token validation failed: invalid token", map[string]interface{}{
 				"ip":    r.RemoteAddr,
 				"path":  r.URL.Path,
 				"error": err.Error(),

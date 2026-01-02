@@ -65,34 +65,34 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.logger.Warn("Registration failed: invalid request body", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    r.RemoteAddr,
-		})
+		LogWarn("Registration failed: invalid request body",
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	s.logger.Info("User registration attempt", map[string]interface{}{
-		"username": req.Username,
-		"ip":       r.RemoteAddr,
-	})
+	LogInfo("User registration attempt",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 
 	if err := validateUsername(req.Username); err != nil {
-		s.logger.Warn("Registration failed: invalid username", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-			"ip":       r.RemoteAddr,
-		})
+		LogWarn("Registration failed: invalid username",
+		"username", req.Username,
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := validatePassword(req.Password); err != nil {
-		s.logger.Warn("Registration failed: weak password", map[string]interface{}{
-			"username": req.Username,
-			"ip":       r.RemoteAddr,
-		})
+		LogWarn("Registration failed: weak password",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -100,18 +100,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Check if user already exists
 	existingUser, err := s.store.GetUserByUsername(req.Username)
 	if err != nil && err != sql.ErrNoRows {
-		s.logger.Error("Registration failed: database error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Registration failed: database error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "DATABASE_ERROR", "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	if existingUser != nil {
-		s.logger.Warn("Registration failed: username already exists", map[string]interface{}{
-			"username": req.Username,
-			"ip":       r.RemoteAddr,
-		})
+		LogWarn("Registration failed: username already exists",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "USER_EXISTS", "Username already exists", http.StatusConflict)
 		return
 	}
@@ -119,10 +119,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Hash password
 	passwordHash, err := s.authManager.HashPassword(req.Password)
 	if err != nil {
-		s.logger.Error("Registration failed: password hashing error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Registration failed: password hashing error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "INTERNAL_ERROR", "Failed to process password", http.StatusInternalServerError)
 		return
 	}
@@ -130,10 +130,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	user, err := s.store.CreateUser(req.Username, passwordHash)
 	if err != nil {
-		s.logger.Error("Registration failed: user creation error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Registration failed: user creation error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "DATABASE_ERROR", "Failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -141,18 +141,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Generate JWT token
 	token, err := s.authManager.GenerateToken(user.Username)
 	if err != nil {
-		s.logger.Error("Registration failed: token generation error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Registration failed: token generation error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "INTERNAL_ERROR", "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	s.logger.Info("User registered successfully", map[string]interface{}{
-		"username": user.Username,
-		"ip":       r.RemoteAddr,
-	})
+	LogInfo("User registered successfully",
+		"username", user.Username,
+		"ip", r.RemoteAddr,
+	)
 
 	// Return success response
 	response := models.AuthResponse{
@@ -182,24 +182,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.logger.Warn("Login failed: invalid request body", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    r.RemoteAddr,
-		})
+		LogWarn("Login failed: invalid request body",
+		"error", err.Error(),
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	s.logger.Info("User login attempt", map[string]interface{}{
-		"username": req.Username,
-		"ip":       r.RemoteAddr,
-	})
+	LogInfo("User login attempt",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 
 	// Validate input
 	if req.Username == "" || req.Password == "" {
-		s.logger.Warn("Login failed: missing credentials", map[string]interface{}{
-			"ip": r.RemoteAddr,
-		})
+		LogWarn("Login failed: missing credentials",
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "VALIDATION_ERROR", "Username and password are required", http.StatusBadRequest)
 		return
 	}
@@ -207,28 +207,28 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Get user from database
 	user, err := s.store.GetUserByUsername(req.Username)
 	if err != nil {
-		s.logger.Error("Login failed: database error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Login failed: database error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "DATABASE_ERROR", "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	if user == nil {
-		s.logger.Warn("Login failed: user not found", map[string]interface{}{
-			"username": req.Username,
-			"ip":       r.RemoteAddr,
-		})
+		LogWarn("Login failed: user not found",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "INVALID_CREDENTIALS", "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
 
 	// Verify password
 	if err := s.authManager.ComparePassword(user.PasswordHash, req.Password); err != nil {
-		s.logger.Warn("Login failed: invalid password", map[string]interface{}{
-			"username": req.Username,
-			"ip":       r.RemoteAddr,
-		})
+		LogWarn("Login failed: invalid password",
+		"username", req.Username,
+		"ip", r.RemoteAddr,
+	)
 		sendErrorResponse(w, "INVALID_CREDENTIALS", "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -239,18 +239,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Generate JWT token
 	token, err := s.authManager.GenerateToken(user.Username)
 	if err != nil {
-		s.logger.Error("Login failed: token generation error", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-		})
+		LogError("Login failed: token generation error",
+		"username", req.Username,
+		"error", err.Error(),
+	)
 		sendErrorResponse(w, "INTERNAL_ERROR", "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	s.logger.Info("User logged in successfully", map[string]interface{}{
-		"username": user.Username,
-		"ip":       r.RemoteAddr,
-	})
+	LogInfo("User logged in successfully",
+		"username", user.Username,
+		"ip", r.RemoteAddr,
+	)
 
 	// Return success response
 	response := models.AuthResponse{
