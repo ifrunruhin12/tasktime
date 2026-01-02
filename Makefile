@@ -1,6 +1,6 @@
 # TimeTask Makefile
 
-.PHONY: build clean server client test deps help docker-up docker-down
+.PHONY: build clean server client test deps help docker-up docker-down fmt
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  make server      - Build and run server locally"
 	@echo "  make client      - Build and run client"
 	@echo "  make test        - Run tests"
+	@echo "  make fmt         - Format Go code using go fmt"
 	@echo "  make clean       - Clean build artifacts"
 	@echo "  make dev-setup   - Full local development setup"
 
@@ -52,6 +53,12 @@ client:
 test:
 	go test ./...
 	go test -race ./...
+
+# Format Go code
+fmt:
+	@echo "Formatting Go code..."
+	go fmt ./...
+	@echo "Code formatting complete!"
 
 # Setup local development database
 setup-db:

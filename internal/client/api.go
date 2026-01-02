@@ -147,15 +147,15 @@ func (m model) createTeamTask(title, project string) tea.Cmd {
 		}
 
 		jsonData, _ := json.Marshal(reqBody)
-		
+
 		// Create request with authentication header
 		req, err := http.NewRequest("POST", m.client.serverURL+"/api/v1/tasks", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return taskCreationFailedMsg{}
 		}
-		
+
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add authentication token if available
 		if m.config != nil && m.config.AuthToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.config.AuthToken)
@@ -190,7 +190,7 @@ func (m model) updateTeamTaskStatus(id, status string) tea.Cmd {
 			m.client.serverURL+"/api/v1/tasks/"+id+"/status",
 			bytes.NewBuffer(jsonData))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add authentication token if available
 		if m.config != nil && m.config.AuthToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.config.AuthToken)
@@ -219,12 +219,12 @@ func (m model) updateTeamTaskStatus(id, status string) tea.Cmd {
 func (m model) deleteTeamTask(id string) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := http.NewRequest("DELETE", m.client.serverURL+"/api/v1/tasks/"+id, nil)
-		
+
 		// Add authentication token if available
 		if m.config != nil && m.config.AuthToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.config.AuthToken)
 		}
-		
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -249,12 +249,12 @@ func (m model) startTeamTimer(id string) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := http.NewRequest("POST", m.client.serverURL+"/api/v1/tasks/"+id+"/time/start", nil)
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add authentication token if available
 		if m.config != nil && m.config.AuthToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.config.AuthToken)
 		}
-		
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -279,12 +279,12 @@ func (m model) stopTeamTimer(id string) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := http.NewRequest("POST", m.client.serverURL+"/api/v1/tasks/"+id+"/time/stop", nil)
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		// Add authentication token if available
 		if m.config != nil && m.config.AuthToken != "" {
 			req.Header.Set("Authorization", "Bearer "+m.config.AuthToken)
 		}
-		
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {

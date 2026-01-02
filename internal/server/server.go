@@ -421,7 +421,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadDeadline(time.Time{})
 
-	s.connectionManager.AddUser(username, conn)
+	connectionID := s.connectionManager.AddUser(username, conn)
 
 	onlineUsers := s.connectionManager.GetOnlineUsers()
 	conn.WriteJSON(models.WSMessage{
@@ -440,16 +440,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 
-	s.logger.Info("User joined", map[string]interface{}{
-		"username":     username,
-		"online_users": len(onlineUsers),
-	})
-
-	s.store.UpdateUserLastSeen(username)
-
+	// Handle connection cleanup on disconnect
 	defer func() {
-		s.connectionManager.RemoveUser(username)
-
+		s.connectionManager.RemoveUser(username, connectionID)
 		s.connectionManager.BroadcastToAll(models.WSMessage{
 			Type: "user.left",
 			Payload: map[string]interface{}{
@@ -457,12 +450,18 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				"timestamp": time.Now().Format(time.RFC3339),
 			},
 		})
-
 		s.logger.Info("User disconnected", map[string]interface{}{
 			"username":     username,
 			"online_users": s.connectionManager.GetOnlineUserCount(),
 		})
 	}()
+
+	s.logger.Info("User joined", map[string]interface{}{
+		"username":     username,
+		"online_users": len(onlineUsers),
+	})
+
+	s.store.UpdateUserLastSeen(username)
 
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))

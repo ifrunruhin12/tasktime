@@ -20,6 +20,8 @@ go.work
 # Built applications
 tasktime-server
 tasktime-client
+timetask-client
+timetask-server
 debug-client
 
 # IDE files

@@ -35,7 +35,7 @@ func (c *Client) Start() error {
 			// Use config values
 			c.config = config
 			c.serverURL = config.ServerURL
-			
+
 			// Validate token and start main app
 			if c.validateToken(config.AuthToken) {
 				p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
@@ -44,7 +44,7 @@ func (c *Client) Start() error {
 			}
 		}
 	}
-	
+
 	// No valid config, run setup flow
 	return c.runSetup()
 }
@@ -57,29 +57,29 @@ func (c *Client) runSetup() error {
 		}
 		c.configManager = cm
 	}
-	
+
 	sm := newSetupModel(c.configManager)
 	p := tea.NewProgram(sm, tea.WithAltScreen())
-	
+
 	_, err := p.Run()
 	if err != nil {
 		return err
 	}
-	
+
 	// After setup completes, load the config and start main app
 	if c.configManager.Exists() {
 		config, err := c.configManager.Load()
 		if err == nil && config.AuthToken != "" {
 			c.config = config
 			c.serverURL = config.ServerURL
-			
+
 			// Start main application
 			p := tea.NewProgram(c.initialModel(), tea.WithAltScreen())
 			_, err := p.Run()
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -87,22 +87,22 @@ func (c *Client) validateToken(token string) bool {
 	if token == "" {
 		return false
 	}
-	
+
 	// Try to validate token with the server
 	req, err := http.NewRequest("GET", c.serverURL+"/api/v1/users/me", nil)
 	if err != nil {
 		return false
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+token)
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
-	
+
 	return resp.StatusCode == 200
 }
 
@@ -139,24 +139,24 @@ type model struct {
 	localStore     *storage.LocalStore
 	config         *ClientConfig
 	onlineUsers    int // Count of online users
-	
+
 	// Assignment UI state
-	showAssignment    bool
-	assignmentCursor  int
-	assignmentUsers   []string
-	assigningTaskID   string
-	
+	showAssignment   bool
+	assignmentCursor int
+	assignmentUsers  []string
+	assigningTaskID  string
+
 	// Filter state
 	currentFilter string // "my" or "all"
-	
+
 	// Users list UI state
-	showUsersList     bool
-	usersListData     []string
-	
+	showUsersList bool
+	usersListData []string
+
 	// Error handling state
-	errorMessage   string    // Current error message to display
-	errorExpiry    time.Time // When the error message should be cleared
-	
+	errorMessage string    // Current error message to display
+	errorExpiry  time.Time // When the error message should be cleared
+
 	// Reconnection state
 	reconnectAttempts int  // Number of reconnection attempts
 	isReconnecting    bool // Whether we're currently trying to reconnect
@@ -337,11 +337,11 @@ func (m model) View() string {
 	if m.showInput {
 		return m.renderInputMode()
 	}
-	
+
 	if m.showAssignment {
 		return m.renderAssignmentMode()
 	}
-	
+
 	if m.showUsersList {
 		return m.renderUsersListMode()
 	}
@@ -356,17 +356,17 @@ func (m model) View() string {
 
 	// Enhanced status bar with username, online users count, and connection status
 	statusBar := "TaskTime v1.0.0"
-	
+
 	// Show username if available
 	if m.config != nil && m.config.Username != "" {
 		statusBar += " | Connected as: " + m.config.Username
 	}
-	
+
 	// Show online users count
 	if m.onlineUsers > 0 {
 		statusBar += fmt.Sprintf(" | Online: %d users", m.onlineUsers)
 	}
-	
+
 	// Show connection status
 	if m.ws != nil {
 		statusBar += " | Server: LIVE"
@@ -375,7 +375,7 @@ func (m model) View() string {
 	} else {
 		statusBar += " | Server: OFFLINE"
 	}
-	
+
 	// Show current filter for team tasks
 	if m.currentSection == "team" {
 		if m.currentFilter == "my" {
@@ -384,14 +384,14 @@ func (m model) View() string {
 			statusBar += " | Filter: All Tasks"
 		}
 	}
-	
+
 	s.WriteString(titleStyle.Render(statusBar))
 	s.WriteString("\n\n")
 
 	// Section tabs
 	personalTab := "Personal Tasks"
 	teamTab := "Team Tasks"
-	
+
 	if m.currentSection == "personal" {
 		personalTab = "▶ " + personalTab + " ◀"
 		teamTab = "  " + teamTab + "  "
@@ -442,14 +442,11 @@ func (m model) View() string {
 func (m model) calculateBackoffDelay() time.Duration {
 	baseDelay := time.Second
 	maxDelay := 30 * time.Second
-	
+
 	// Calculate exponential delay: 2^attempts seconds
-	delay := baseDelay * time.Duration(1<<uint(m.reconnectAttempts))
-	
-	// Cap at maximum delay
-	if delay > maxDelay {
-		delay = maxDelay
-	}
-	
+	delay := min(
+		// Cap at maximum delay
+		baseDelay*time.Duration(1<<uint(m.reconnectAttempts)), maxDelay)
+
 	return delay
 }

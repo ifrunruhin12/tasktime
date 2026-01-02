@@ -119,7 +119,7 @@ func (m model) renderAssignmentMode() string {
 		if m.config != nil && username == m.config.Username {
 			userLine += " (you)"
 		}
-		
+
 		if m.assignmentCursor == i+1 {
 			s.WriteString(selectedStyle.Render("▶ " + userLine))
 		} else {
@@ -154,7 +154,7 @@ func (m model) renderUsersListMode() string {
 			s.WriteString("\n")
 		}
 		s.WriteString("\n")
-		
+
 		// Show total count
 		s.WriteString(fmt.Sprintf("Total: %d users online\n\n", len(m.usersListData)))
 	}

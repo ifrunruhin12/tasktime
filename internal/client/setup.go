@@ -9,17 +9,17 @@ import (
 
 // setupModel represents the first-time setup flow
 type setupModel struct {
-	configManager     *ConfigManager
-	config            *ClientConfig
-	step              int // 0: server URL, 1: login/register choice, 2: username, 3: password, 4: confirm password (register only)
-	authMode          string // "login" or "register"
-	serverURL         string
-	username          string
-	password          string
-	confirmPassword   string
-	errorMsg          string
-	width             int
-	height            int
+	configManager   *ConfigManager
+	config          *ClientConfig
+	step            int    // 0: server URL, 1: login/register choice, 2: username, 3: password, 4: confirm password (register only)
+	authMode        string // "login" or "register"
+	serverURL       string
+	username        string
+	password        string
+	confirmPassword string
+	errorMsg        string
+	width           int
+	height          int
 }
 
 type setupCompleteMsg struct {
@@ -67,12 +67,12 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.Username = msg.username
 		m.config.AuthToken = msg.token
 		m.config.ServerURL = m.serverURL
-		
+
 		if err := m.configManager.Save(m.config); err != nil {
 			m.errorMsg = fmt.Sprintf("Failed to save config: %v", err)
 			return m, nil
 		}
-		
+
 		return m, func() tea.Msg {
 			return setupCompleteMsg{config: m.config}
 		}
@@ -112,7 +112,7 @@ func (m setupModel) View() string {
 		// Login or Register choice
 		s.WriteString(fmt.Sprintf("Server: %s\n\n", m.serverURL))
 		s.WriteString("Do you have an account?\n\n")
-		
+
 		if m.authMode == "" || m.authMode == "login" {
 			s.WriteString(selectedStyle.Render("▶ Login"))
 			s.WriteString("\n")
@@ -220,7 +220,7 @@ func (m setupModel) handleSetupKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.errorMsg = "Password must be at least 8 characters"
 				return m, nil
 			}
-			
+
 			// For login, authenticate directly. For register, go to confirm password
 			if m.authMode == "login" {
 				return m, m.authenticate()
