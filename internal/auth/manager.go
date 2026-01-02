@@ -3,7 +3,6 @@ package auth
 import (
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,7 +11,6 @@ import (
 
 const (
 	BcryptCost        = 10
-	TokenExpiryDays   = 7
 	MinPasswordLength = 8
 )
 
@@ -30,20 +28,24 @@ type Claims struct {
 }
 
 type Manager struct {
-	jwtSecret []byte
+	jwtSecret    []byte
+	expiryDays   int
 }
 
-func NewManager() (*Manager, error) {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
+func NewManager(jwtSecret string, expiryDays int) (*Manager, error) {
+	if jwtSecret == "" {
 		return nil, ErrMissingJWTSecret
 	}
-	if len(secret) < 32 {
+	if len(jwtSecret) < 32 {
 		return nil, errors.New("JWT_SECRET must be at least 32 characters")
+	}
+	if expiryDays <= 0 {
+		return nil, errors.New("JWT expiry days must be positive")
 	}
 
 	return &Manager{
-		jwtSecret: []byte(secret),
+		jwtSecret:  []byte(jwtSecret),
+		expiryDays: expiryDays,
 	}, nil
 }
 
@@ -72,7 +74,7 @@ func (m *Manager) ComparePassword(hash, password string) error {
 }
 
 func (m *Manager) GenerateToken(username string) (string, error) {
-	expirationTime := time.Now().Add(TokenExpiryDays * 24 * time.Hour)
+	expirationTime := time.Now().Add(time.Duration(m.expiryDays) * 24 * time.Hour)
 
 	claims := &Claims{
 		Username: username,

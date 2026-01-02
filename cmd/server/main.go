@@ -1,23 +1,18 @@
 package main
 
 import (
-	"flag"
-	"log"
-
-	_ "github.com/ifrunruhin12/tasktime/docs" // Import generated docs
+	_ "github.com/ifrunruhin12/tasktime/docs"
 	"github.com/ifrunruhin12/tasktime/internal/server"
 )
 
 func main() {
-	port := flag.String("port", "8080", "Port to run the server on")
-	flag.Parse()
-
 	srv, err := server.New()
 	if err != nil {
-		log.Fatal("Failed to create server:", err)
+		panic("Failed to create server: " + err.Error())
 	}
 
-	if err := srv.Start(*port); err != nil {
-		log.Fatal("Failed to start server:", err)
+	if err := srv.Start(); err != nil {
+		server.LogError("Failed to start server", "error", err.Error())
+		panic("Failed to start server: " + err.Error())
 	}
 }

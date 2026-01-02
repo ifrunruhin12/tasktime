@@ -3,9 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -19,6 +17,7 @@ import (
 )
 
 type Server struct {
+	config            *Config
 	store             *storage.PostgresStore
 	authManager       *auth.Manager
 	connectionManager *ConnectionManager
@@ -33,35 +32,47 @@ var upgrader = websocket.Upgrader{
 }
 
 func New() (*Server, error) {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		databaseURL = "postgres://tasktime:tasktime@localhost/tasktime?sslmode=disable"
-	}
-
-	store, err := storage.NewPostgresStore(databaseURL)
+	// Load configuration from environment variables
+	config, err := LoadConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	authManager, err := auth.NewManager()
+	// Validate configuration
+	if err := config.ValidateConfig(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Initialize database store
+	store, err := storage.NewPostgresStore(config.DatabaseURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize database store: %w", err)
 	}
 
-	logLevel := os.Getenv("LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "info"
+	// Initialize auth manager with config values
+	authManager, err := auth.NewManager(config.JWTSecret, config.JWTExpiryDays)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize auth manager: %w", err)
 	}
-	logFile := os.Getenv("LOG_FILE")
-	
-	err = InitLogger(logLevel, logFile)
+
+	// Initialize logger with config values
+	err = InitLogger(config.LogLevel, config.LogFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
-	LogInfo("Server initializing", "log_level", logLevel, "log_file", logFile)
+	LogInfo("Server initializing", 
+		"log_level", config.LogLevel, 
+		"log_file", config.LogFile,
+		"port", config.Port,
+		"host", config.Host,
+		"jwt_expiry_days", config.JWTExpiryDays,
+		"ws_ping_interval", config.WSPingInterval,
+		"ws_pong_timeout", config.WSPongTimeout,
+	)
 
 	return &Server{
+		config:            config,
 		store:             store,
 		authManager:       authManager,
 		connectionManager: NewConnectionManager(),
@@ -71,7 +82,7 @@ func New() (*Server, error) {
 	}, nil
 }
 
-func (s *Server) Start(port string) error {
+func (s *Server) Start() error {
 	r := chi.NewRouter()
 
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
@@ -102,8 +113,9 @@ func (s *Server) Start(port string) error {
 
 	r.Get("/api/v1/ws", s.handleWebSocket)
 
-	log.Printf("TaskTime server running on :%s", port)
-	return http.ListenAndServe(":"+port, r)
+	address := s.config.Host + ":" + s.config.Port
+	LogInfo("TaskTime server starting", "address", address)
+	return http.ListenAndServe(address, r)
 }
 
 func (s *Server) broadcast(message interface{}) {
@@ -468,12 +480,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.store.UpdateUserLastSeen(username)
 
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(s.config.WSPongTimeout))
 		s.connectionManager.UpdateLastPing(username)
 		return nil
 	})
 
-	pingTicker := time.NewTicker(30 * time.Second)
+	pingTicker := time.NewTicker(s.config.WSPingInterval)
 	defer pingTicker.Stop()
 
 	go func() {
@@ -616,7 +628,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	err := s.store.Ping()
 	if err != nil {
 		dbStatus = "disconnected"
-		log.Printf("Health check: database ping failed: %v", err)
+		LogError("Health check: database ping failed", "error", err.Error())
 
 		response := map[string]interface{}{
 			"status":    "unhealthy",
@@ -649,21 +661,21 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	totalUsers, err := s.store.GetTotalUsersCount()
 	if err != nil {
-		log.Printf("Failed to get total users count: %v", err)
+		LogError("Failed to get total users count", "error", err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	totalTasks, err := s.store.GetTotalTasksCount()
 	if err != nil {
-		log.Printf("Failed to get total tasks count: %v", err)
+		LogError("Failed to get total tasks count", "error", err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	activeTimers, err := s.store.GetActiveTimersCount()
 	if err != nil {
-		log.Printf("Failed to get active timers count: %v", err)
+		LogError("Failed to get active timers count", "error", err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

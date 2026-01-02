@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"log"
 	"sync"
 	"time"
 
@@ -54,8 +53,12 @@ func (cm *ConnectionManager) AddUser(username string, conn *websocket.Conn) stri
 		}
 	}
 
-	log.Printf("User %s added connection %s. Total connections for user: %d, Total users: %d",
-		username, connectionID, len(cm.connections[username]), len(cm.users))
+	LogDebug("User connection added",
+		"username", username,
+		"connection_id", connectionID,
+		"user_connections", len(cm.connections[username]),
+		"total_users", len(cm.users),
+	)
 
 	return connectionID
 }
@@ -73,10 +76,16 @@ func (cm *ConnectionManager) RemoveUser(username, connectionID string) {
 			if len(userConnections) == 0 {
 				delete(cm.connections, username)
 				delete(cm.users, username)
-				log.Printf("User %s completely disconnected. Total users: %d", username, len(cm.users))
+				LogDebug("User completely disconnected",
+					"username", username,
+					"total_users", len(cm.users),
+				)
 			} else {
-				log.Printf("User %s removed connection %s. Remaining connections: %d",
-					username, connectionID, len(userConnections))
+				LogDebug("User connection removed",
+					"username", username,
+					"connection_id", connectionID,
+					"remaining_connections", len(userConnections),
+				)
 			}
 		}
 	}
@@ -112,7 +121,11 @@ func (cm *ConnectionManager) BroadcastToAll(message models.WSMessage) {
 		for connectionID, conn := range userConnections {
 			err := conn.WriteJSON(message)
 			if err != nil {
-				log.Printf("Broadcast error: failed to send message to user %s connection %s: %v", username, connectionID, err)
+				LogWarn("Broadcast error: failed to send message",
+					"username", username,
+					"connection_id", connectionID,
+					"error", err.Error(),
+				)
 				toRemove = append(toRemove, struct {
 					username     string
 					connectionID string
@@ -143,7 +156,11 @@ func (cm *ConnectionManager) BroadcastToUser(username string, message models.WSM
 	for connectionID, conn := range userConnections {
 		err := conn.WriteJSON(message)
 		if err != nil {
-			log.Printf("Broadcast error: failed to send message to user %s connection %s: %v", username, connectionID, err)
+			LogWarn("Broadcast error: failed to send message to user",
+				"username", username,
+				"connection_id", connectionID,
+				"error", err.Error(),
+			)
 			cm.RemoveUser(username, connectionID)
 			errors = append(errors, err)
 		}

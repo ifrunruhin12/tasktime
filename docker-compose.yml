@@ -22,9 +22,15 @@ services:
     build: .
     container_name: timetask-server
     environment:
-      DATABASE_URL: "postgres://tasktime:tasktime@postgres:5432/tasktime?sslmode=disable"
+      # Use NEON_DATABASE_URL for consistency, but point to local postgres for development
+      NEON_DATABASE_URL: "postgres://tasktime:tasktime@postgres:5432/tasktime?sslmode=disable"
       JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
-      PORT: "8080"
+      TASKTIME_PORT: "8080"
+      TASKTIME_HOST: "0.0.0.0"
+      LOG_LEVEL: "info"
+      JWT_EXPIRY_DAYS: "7"
+      WS_PING_INTERVAL: "30s"
+      WS_PONG_TIMEOUT: "60s"
     ports:
       - "8080:8080"
     depends_on:
